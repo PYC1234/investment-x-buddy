@@ -47,14 +47,14 @@
 
 ## 最终提交人需填写
 
-- 提交人姓名：`<待填写>`
-- GitHub 账号/仓库：`<待填写>`
-- Web URL：`<待填写>`
-- 后端 URL：`<待填写>`
-- 最终提交 Commit SHA：`<待填写>`
-- Stage 3 验收日期与结果：`<待填写>`
-- 云端完整流程验收日期与结果：`<待填写>`
-- 是否附演示视频：`<待填写>`
+- 提交人姓名：`<待填写（请填你的姓名）>`
+- GitHub 账号/仓库：`PYC1234 / investment-x-buddy`
+- Web URL：`https://relaxed-cuchufli-47f2fa.netlify.app/`
+- 后端 URL：`https://investment-x-buddy.onrender.com`
+- 最终提交 Commit SHA：`4f16e90`
+- Stage 3 验收日期与结果：`2026-10-10 · 前端 typecheck/lint/build 通过；后端 Pytest 11 项通过；本地 Fixture 全链路通过`
+- 云端完整流程验收日期与结果：`2026-10-10 · Render /api/v1/health 200；线上创建→计划→审批→工具(3/3)→Evidence(全部 DEMO)→Report→刷新恢复 全链路通过`
+- 是否附演示视频：`是（record.mp4，随交付包附带）`
 
 ## 发布前签核
 
