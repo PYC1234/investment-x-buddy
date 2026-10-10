@@ -1,0 +1,15 @@
+import { strict as assert } from 'node:assert';
+import { createThread } from '../data/demo';
+import { transition } from './demo-machine';
+let run = transition(createThread('test'), { type: 'START', goal: '研究目标' });
+assert.equal(run.status, 'running');
+run = transition(run, { type: 'TICK', time: '10:00:00' });
+run = transition(run, { type: 'TICK', time: '10:00:01' });
+assert.equal(run.status, 'approval');
+run = transition(run, { type: 'APPROVE', time: '10:00:02' });
+assert.equal(run.approval, 'approved');
+run = transition(run, { type: 'FAIL', time: '10:00:03' });
+assert.equal(run.status, 'failed');
+run = transition(run, { type: 'RECOVER', time: '10:00:04' });
+assert.equal(run.status, 'running');
+console.log('demo state machine: PASS');

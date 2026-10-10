@@ -1,0 +1,10 @@
+[build]
+  base = "frontend"
+  command = "npm run build"
+  publish = ".next"
+
+[build.environment]
+  NODE_VERSION = "24"
+
+# Keep NEXT_PUBLIC_API_BASE_URL unset until the Render backend is public.
+# Configure it in the Netlify UI, then trigger a new deploy to enable API mode.

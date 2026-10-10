@@ -1,0 +1,33 @@
+# Local secrets and environment overrides
+.env
+.env.*
+!.env.example
+
+# Python environments, caches, coverage, and local databases
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+
+# Node dependencies and generated output
+node_modules/
+.next/
+out/
+build/
+coverage/
+*.tsbuildinfo
+
+# Local logs and deployment platform state
+*.log
+.netlify/
+.vercel/
