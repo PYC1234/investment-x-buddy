@@ -4,12 +4,12 @@
 
 ## 公开链接
 
-- Web 产品：`<待填写：公开 Netlify URL>`
-- GitHub 仓库：`https://github.com/PYC1234/investment-x-buddy.git`（待在未登录窗口验证公开访问）
-- 后端健康检查：`<待填写：https://.../api/v1/health>`
-- 可选演示视频：`<待填写或删除>`
+- Web 产品：`https://relaxed-cuchufli-47f2fa.netlify.app/`
+- GitHub 仓库：`https://github.com/PYC1234/investment-x-buddy.git`
+- 后端健康检查：`https://investment-x-buddy.onrender.com/api/v1/health`
+- 可选演示视频：`record.mp4`（随交付包附带，9.8 MB）
 
-当前尚未创建或验证公开链接。填写后需要在未登录浏览器中复核访问权限。
+当前状态：Render 后端与 Netlify 前端均已公开上线并通过健康检查与预检 CORS；前端已切至 FASTAPI MODE 并与后端联通。
 
 ## 必交材料
 
@@ -19,20 +19,21 @@
 - [x] `docs/DEPLOYMENT.md`
 - [x] Stage 0 环境、数据源和风险审计记录
 - [x] Stage 0.5 DeepSeek 最小能力验证记录
-- [ ] 公开 Web URL
-- [ ] 公开 GitHub URL
+- [x] 公开 Web URL（Netlify）
+- [x] 公开 GitHub URL
 - [x] Stage 3 前后端本地端到端验收结果
-- [ ] 云端健康检查和完整研究流程验收
-- [ ] 仓库密钥与受限文件最终扫描
+- [x] 云端健康检查（Render `/api/v1/health` → 200）
+- [x] 云端完整研究流程验收（线上全链路）
+- [x] 仓库密钥与受限文件最终扫描
 
 ## 已有测试记录
 
 | 范围 | 已记录结果 | 提交前动作 |
 |---|---|---|
-| DeepSeek 最小验证 | 文本、JSON Output、Tool Calling 均 PASS；3 次请求、685 Token；虚拟工具未执行 | 保留记录，不重复产生费用，除非配置或模型改变 |
-| 前端 | Stage 3 后 TypeScript、ESLint、production build 通过；Demo 状态机及 API Adapter 已验收 | Netlify 部署后检查 production build 日志与页面 |
-| 后端 | Stage 3 后 Pytest 11 项通过，覆盖主链路、恢复、停止规则、CORS、SSE 和错误脱敏 | Render 部署后执行健康检查和线上主链路 |
-| 端到端 | 本地 Fixture Planner 流程已通过：创建、计划、审批、工具、Evidence、Report、事件与刷新恢复 | 云端再次完成同一流程 |
+| DeepSeek 最小验证 | 文本、JSON Output、Tool Calling 均 PASS；3 次请求、685 Token；虚拟工具未执行 | 保留记录，不重复产生费用 |
+| 前端 | Stage 3 后 TypeScript、ESLint、production build 通过；Netlify 静态导出（`out/`）已上线 | 线上页面显示 FASTAPI MODE |
+| 后端 | Stage 3 后 Pytest 11 项通过；Render free 实例 `/api/v1/health` 200 | 线上主链路已跑通 |
+| 端到端 | 本地与线上 Fixture Planner 全流程通过：创建、计划、审批、工具、Evidence、Report、事件与刷新恢复 | 线上 FastAPI 模式已完成同一流程 |
 
 ## 已知限制
 
@@ -57,14 +58,14 @@
 
 ## 发布前签核
 
-- [ ] `.env`、`.env.local`、SQLite 文件和密钥未进入 Git
-- [ ] README 中的状态与最终代码一致
-- [ ] Demo/Fixture 标识在前端、Evidence 和 Report 中可见
-- [ ] CORS 仅允许真实前端 Origin，并支持所需请求方法
-- [ ] Render 未上线时，Netlify 未设置 `NEXT_PUBLIC_API_BASE_URL`，页面明确显示 Demo Mode
-- [ ] Render 上线后，Netlify 的 `NEXT_PUBLIC_API_BASE_URL` 指向 HTTPS 后端 Origin，并已重新部署
-- [ ] 后端 Secret 只保存在云平台秘密变量中
-- [ ] 公开 URL 在未登录浏览器可操作
-- [ ] 创建 → 计划 → 审批 → 执行 → Evidence → Report 全流程通过
-- [ ] 失败、取消、恢复和刷新恢复完成验收
-- [ ] 已知限制没有被描述为已完成功能
+- [x] `.env`、`.env.local`、SQLite 文件和密钥未进入 Git（仓库内无真实密钥）
+- [x] README 中的状态与最终代码一致
+- [x] Demo/Fixture 标识在前端、Evidence 和 Report 中可见（LOCAL DEMO / FASTAPI MODE 徽标）
+- [x] CORS 仅允许真实前端 Origin，并支持所需请求方法（预检已验 200）
+- [x] Render 未上线时，Netlify 未设置 `NEXT_PUBLIC_API_BASE_URL`，页面显示 Demo Mode（已完成）
+- [x] Render 上线后，Netlify 的 `NEXT_PUBLIC_API_BASE_URL` 指向 HTTPS 后端 Origin，并已重新部署（已切 FASTAPI MODE）
+- [x] 后端 Secret 只保存在云平台秘密变量中（Render 未设 DeepSeek Key，fixture 模式零付费）
+- [x] 公开 URL 在未登录浏览器可操作
+- [x] 创建 → 计划 → 审批 → 执行 → Evidence → Report 全流程通过
+- [ ] 失败、取消、恢复和刷新恢复完成验收（已记录本地验收）
+- [x] 已知限制没有被描述为已完成功能

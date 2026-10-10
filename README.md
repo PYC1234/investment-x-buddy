@@ -2,7 +2,7 @@
 
 Investment X Buddy 是面向个人投资研究者的 AI Agent 工作台。用户给出研究目标后，系统生成受控研究计划，在用户批准工具范围后执行任务，将数据整理为可追踪的 Evidence 和 Report，并记录成本、时延、检查点与失败状态。
 
-> 当前状态：前端、FastAPI Harness、Fixture 主链路和本地前后端联调均已完成；云端部署与线上验收尚未完成。所有 Fixture 金融数值均为 **DEMO DATA**，不是实时行情或投资建议。
+> 当前状态：前端、FastAPI Harness、Fixture 主链路和本地前后端联调均已完成；**Render 后端与 Netlify 前端已公开上线并通过健康检查与 CORS 预检，前端已切至 FASTAPI MODE 与后端联通**。所有 Fixture 金融数值均为 **DEMO DATA**，不是实时行情或投资建议。
 
 ## 解决的问题
 
@@ -134,4 +134,11 @@ npm run dev
 
 ## 部署
 
-前端计划部署到 Netlify，后端部署到 Render。仓库根目录的 `netlify.toml` 已将 Base Directory 设为 `frontend`，使用 `npm run build` 构建并发布 `.next`。Render 未上线时不配置 `NEXT_PUBLIC_API_BASE_URL`，前端保持 Demo Mode；后端上线后在 Netlify 构建环境中设置该公开 Origin 并重新部署。SQLite 只有在挂载持久磁盘并正确设置 `SQLITE_PATH` 时才能跨重启保留；演示部署应使用单个 Uvicorn worker。完整步骤和验收清单见 [部署文档](docs/DEPLOYMENT.md)。当前没有公开 Web URL，也没有声称部署完成。
+前端计划部署到 Netlify，后端部署到 Render。仓库根目录的 `netlify.toml` 已将 Base Directory 设为 `frontend`，前端为纯客户端静态应用，使用 `output: "export"` 静态导出并发布 `frontend/out`（`.next` 是构建缓存，不是可发布目录）。
+
+公开地址：
+- Web 产品：`https://relaxed-cuchufli-47f2fa.netlify.app/`（FastAPI 模式，已联通后端）
+- 后端健康检查：`https://investment-x-buddy.onrender.com/api/v1/health`
+- GitHub 仓库：`https://github.com/PYC1234/investment-x-buddy.git`
+
+Render 后端使用 `PLANNER_MODE=fixture`（不配置任何 `DEEPSEEK_*` 密钥），因此零付费请求、所有数值强制标为 DEMO DATA。SQLite 只有在挂载持久磁盘并正确设置 `SQLITE_PATH` 时才能跨重启保留；免费实例为单 worker、非持久磁盘，跨重启不保证保留。Render 的 `Root Directory` 必须设为 `backend`（否则 `uvicorn app.main:app` 报 `No module named 'app'`）。完整步骤和验收清单见 [部署文档](docs/DEPLOYMENT.md)。
