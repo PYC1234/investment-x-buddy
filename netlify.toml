@@ -1,10 +1,15 @@
 [build]
   base = "frontend"
   command = "npm run build"
-  publish = ".next"
+  publish = "out"
 
 [build.environment]
   NODE_VERSION = "24"
 
-# Keep NEXT_PUBLIC_API_BASE_URL unset until the Render backend is public.
-# Configure it in the Netlify UI, then trigger a new deploy to enable API mode.
+# Frontend is a fully client-side, static Next.js app: build with static export
+# (`output: "export"`) and publish the `frontend/out` directory. `.next` is a
+# build cache, NOT a publishable directory.
+#
+# NEXT_PUBLIC_API_BASE_URL stays unset until the Render backend is public.
+# Configure it in the Netlify UI (build environment), then trigger a new deploy
+# to enable API mode.
