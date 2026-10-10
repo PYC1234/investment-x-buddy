@@ -1,6 +1,6 @@
 # Investment X Buddy 提交清单
 
-更新时间：2026-10-10（Asia/Shanghai）
+更新时间：2026-10-10
 
 ## 公开链接
 
@@ -51,7 +51,7 @@
 - GitHub 账号/仓库：`PYC1234 / investment-x-buddy`
 - Web URL：`https://relaxed-cuchufli-47f2fa.netlify.app/`
 - 后端 URL：`https://investment-x-buddy.onrender.com`
-- 最终提交 Commit SHA：`4f16e90`
+- 最终提交 Commit SHA：`22e5149`
 - Stage 3 验收日期与结果：`2026-10-10 · 前端 typecheck/lint/build 通过；后端 Pytest 11 项通过；本地 Fixture 全链路通过`
 - 云端完整流程验收日期与结果：`2026-10-10 · Render /api/v1/health 200；线上创建→计划→审批→工具(3/3)→Evidence(全部 DEMO)→Report→刷新恢复 全链路通过`
 - 是否附演示视频：`是（record.mp4，随交付包附带）`
