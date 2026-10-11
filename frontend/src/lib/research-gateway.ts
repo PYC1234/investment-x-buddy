@@ -116,6 +116,7 @@ export function applyBundle(thread: ResearchThread, bundle: RunBundle): Research
 }
 
 export const researchApi = {
+  tools: (signal?: AbortSignal) => request<ApiTool[]>('/api/v1/tools', { signal }),
   createRun: (goal: string, preferences: Preferences, signal?: AbortSignal) => request<ApiRun>('/api/v1/runs', { method: 'POST', body: JSON.stringify({ goal, preferences }), signal }),
   getRunBundle: loadRunBundle,
   approve: (id: string, planVersion: number, allowedTools: string[], signal?: AbortSignal) => request<ApiRun>(`/api/v1/runs/${id}/approve`, { method: 'POST', body: JSON.stringify({ plan_version: planVersion, allowed_tools: allowedTools }), signal }),

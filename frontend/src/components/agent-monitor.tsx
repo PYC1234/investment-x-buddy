@@ -8,11 +8,11 @@ import type { ResearchThread } from '@/types/research';
 export function AgentMonitor({ thread, mode, apiError, onOpenPreferences, onSwitchDemo }: { thread: ResearchThread; mode: AppMode; apiError: string | null; onOpenPreferences: () => void; onSwitchDemo: () => void }) {
   const [open, setOpen] = useState('tools');
   const toggle = (id: string) => setOpen(open === id ? '' : id);
-  const tools = mode === 'api' && thread.apiTools ? thread.apiTools : toolsRegistry;
+  const tools = mode === 'api' ? thread.apiTools ?? [] : toolsRegistry;
   const cost = mode === 'api' ? (thread.costUsd == null ? thread.costStatus ?? 'NOT_CONFIGURED' : `$${thread.costUsd.toFixed(6)}`) : `¥${(thread.tokens / 100000 * 1.8).toFixed(3)}`;
   const stateText = thread.loading ? '请求处理中' : thread.status === 'running' ? '正在执行计划' : thread.status === 'approval' ? '等待人工审批' : ['failed','partial'].includes(thread.status) ? '需要检查或恢复' : 'Agent 已就绪';
   return <aside className="monitor">
-    <div className="monitor-head"><div><span className={`pulse ${thread.status}`} /><div><strong>Agent Monitor</strong><small>{mode === 'demo' ? 'LOCAL UI DEMO' : 'FASTAPI CONNECTED'}</small></div></div><CircleGauge size={20} /></div>
+    <div className="monitor-head"><div><span className={`pulse ${thread.status}`} /><div><strong>Agent Monitor</strong><small>{mode === 'demo' ? 'LOCAL UI DEMO' : 'FASTAPI MODE'}</small></div></div><CircleGauge size={20} /></div>
     {apiError && <div className="api-error"><strong>真实 API 请求失败，未切换为成功演示。</strong><br/><span>{apiError}</span><button className="mode-switch" onClick={onSwitchDemo}>主动切换 Demo Mode</button></div>}
     <section className="agent-state"><div className="state-top"><span className="agent-orb"><BrainCircuit /></span><div><small>ORCHESTRATOR</small><strong>{stateText}</strong></div><span className={`state-pill ${thread.status}`}>{thread.apiStatus ?? thread.status.toUpperCase()}</span></div><div className="role-grid"><div><span>Planner</span><strong><Check />{thread.plannerMode ?? 'Ready'}</strong></div><div><span>Executor</span><strong>{thread.loading || thread.status === 'running' ? <><Activity />Active</> : 'Standby'}</strong></div></div></section>
     <div className="telemetry"><div><Wrench/><span>Tool calls<strong>{thread.calls}</strong></span></div><div><MemoryStick/><span>Token usage<strong>{thread.tokens.toLocaleString()}</strong></span></div><div><Coins/><span>Est. cost<strong>{cost}</strong></span></div><div><Clock3/><span>Latency<strong>{thread.latency.toFixed(3)}s</strong></span></div></div>

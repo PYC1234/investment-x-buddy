@@ -19,8 +19,8 @@ const now = () => new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minu
 const pollable = new Set(['PLANNING', 'APPROVED', 'RUNNING']);
 
 export function ResearchDashboard() {
-  const [threads, setThreads] = useState(initialThreads);
-  const [activeId, setActiveId] = useState('maotai');
+  const [threads, setThreads] = useState<ResearchThread[]>(() => configuredMode === 'api' ? [{ ...createThread('api-draft', '研究工作台', '', '新的研究线程'), updated: '尚未创建研究', apiTools: [] }] : initialThreads);
+  const [activeId, setActiveId] = useState(configuredMode === 'api' ? 'api-draft' : 'maotai');
   const active = threads.find(thread => thread.id === activeId) ?? threads[0];
   const [goal, setGoal] = useState(active.goal);
   const [mode, setMode] = useState<AppMode>(configuredMode);
@@ -32,6 +32,17 @@ export function ResearchDashboard() {
   const [preferences, setPreferences] = useState<Preferences>({ horizon: '3–5 年', risk: '中等', evidence: true });
   const pollInFlight = useRef(false);
   const restored = useRef(false);
+
+  useEffect(() => {
+    if (mode !== 'api') return;
+    const controller = new AbortController();
+    void researchApi.tools(controller.signal).then(result => {
+      if (controller.signal.aborted) return;
+      if (!result.ok) { setApiError(result.error); return; }
+      setThreads(list => list.map(thread => ({ ...thread, apiTools: result.data.map(tool => ({ name: tool.name, description: tool.description, permission: tool.data_source, parameters: tool.parameters })) })));
+    });
+    return () => controller.abort();
+  }, [mode]);
 
   const data = useMemo(() => mode === 'api' ? active.apiDataset ?? null : demoGateway.getDataset(active.code), [active.apiDataset, active.code, mode]);
   const updateById = useCallback((id: string, fn: (thread: ResearchThread) => ResearchThread) => {
@@ -96,7 +107,7 @@ export function ResearchDashboard() {
           : await researchApi.cancel(active.remoteRunId, controller.signal);
     if (!result.ok) {
       setApiError(result.error);
-      updateById(active.id, thread => ({ ...thread, loading: false }));
+      updateById(active.id, thread => ({ ...thread, loading: false, status: active.status }));
       return;
     }
     await refreshRun(active.remoteRunId, active.id);
@@ -116,7 +127,8 @@ export function ResearchDashboard() {
       return;
     }
     window.localStorage.setItem('investment-x-buddy.active-run', result.data.id);
-    await refreshRun(result.data.id, active.id);
+    const bundle = await refreshRun(result.data.id, active.id);
+    updateById(active.id, thread => ({ ...thread, loading: false, tab: bundle ? 'Plan' : thread.tab }));
   };
 
   const selectThread = (id: string) => {
@@ -127,7 +139,7 @@ export function ResearchDashboard() {
   };
   const newThread = () => {
     const id = `local-${Date.now()}`;
-    const next = createThread(id);
+    const next = { ...createThread(id), ...(mode === 'api' ? { updated: '尚未创建研究', apiTools: active.apiTools ?? [] } : {}) };
     setThreads(list => [next, ...list]); setActiveId(id); setGoal(''); setSidebarOpen(false);
   };
   const setTab = (tab: WorkspaceTab) => updateById(active.id, thread => ({ ...thread, tab }));
