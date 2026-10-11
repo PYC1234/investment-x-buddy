@@ -57,6 +57,11 @@ async def test_end_to_end_persists_evidence_report_checkpoint_and_memory(tmp_pat
         assert len(evidence) == 3
         assert set(report["evidence_ids"]) == {item["id"] for item in evidence}
         assert all(item["is_demo"] for item in evidence)
+        statements = " ".join(item["statement"] for item in report["findings"])
+        assert "24.6" in statements and "31.2" in statements
+        assert "风险" in statements and "目标价" in statements
+        assert report["missing_information"]
+        assert all(set(item["evidence_ids"]) <= set(report["evidence_ids"]) for item in report["findings"])
         assert any(item["after_chars"] < item["before_chars"] for item in checkpoints)
         assert memory["research_preferences"]["risk_style"] == "conservative"
 

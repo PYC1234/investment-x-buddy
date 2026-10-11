@@ -224,15 +224,38 @@ class RunService:
         for task in tasks:
             item = by_task.get(task["id"])
             if item:
-                available = item["data"].get("available", True)
-                findings.append({"task": task["title"], "statement": f"DEMO DATA captured by {task['tool_name']}; available={available}.", "evidence_ids": [item["id"]]})
+                data = item["data"]
+                available = data.get("available", True)
+                snapshot = data.get("snapshot")
+                valuation = data.get("valuation")
+                financials = data.get("financials")
+                statement = "当前证据未包含可用指标；不能据此形成估值结论。"
+                if available and snapshot:
+                    statement = f"行情快照（DEMO DATA）：示例价格为 {snapshot['price_cny']:g} 元，单日变动 {snapshot.get('change_percent', 0):g}%，时间标记为 {snapshot.get('as_of', '未知')}。单日变动不能代表长期趋势，且该价格不是实时行情。"
+                elif available and valuation:
+                    statement = f"估值观察（DEMO DATA）：PE(TTM) 为 {valuation['pe_ttm']:g} 倍、PB 为 {valuation['pb']:g} 倍、股息率为 {valuation['dividend_yield_percent']:g}%。这些倍数需结合盈利持续性、历史区间和同业比较判断；现有证据不足以认定低估或高估，也不能给出目标价。"
+                elif available and financials:
+                    statement = f"盈利能力（DEMO DATA，{data.get('fiscal_year')} 年）：ROE 为 {financials['roe_percent']:g}%，净利率为 {financials['net_margin_percent']:g}%，营收增速为 {financials['revenue_growth_percent']:g}%。样本呈现较强盈利能力，但单年指标无法证明增长可持续，需补充现金流与多年财报。"
+                findings.append({"task": task["title"], "statement": statement, "evidence_ids": [item["id"]]})
                 if not available:
-                    missing.append(item["data"].get("missing_information") or f"Missing data for {task['title']}.")
+                    missing.append(data.get("missing_information") or f"Missing data for {task['title']}.")
             else:
                 missing.append(task.get("error") or f"No evidence produced for {task['title']}.")
         if stop_reason:
             missing.append(f"Execution stopped by rule: {stop_reason}.")
-        return {"title": f"Research report: {run['goal']}", "status": status, "data_notice": "ALL FINANCIAL VALUES ARE FIXTURE / DEMO DATA; not live market data.", "executive_summary": f"Completed {len(evidence)} of {len(tasks)} planned evidence tasks.", "findings": findings, "missing_information": missing, "evidence_ids": [item["id"] for item in evidence]}
+        valid = [item for item in evidence if item["data"].get("available")]
+        if valid:
+            findings.append({"task": "风险与待验证假设", "statement": "研究风险清单（待验证，并非已发生事实）：若需求、产品价格或渠道回款走弱，盈利增长可能低于预期；若市场要求的回报率上升，估值倍数可能收缩。现有 Fixture 指标无法判断这些风险的概率或幅度，需用真实公告和行业数据核实。", "evidence_ids": [item["id"] for item in valid]})
+        missing.extend([
+            "所有金融指标均为人工构造的 DEMO DATA；尚未核验实时行情、交易所公告及经审计财报。",
+            "缺少历史估值区间、同业比较、现金流、负债及渠道数据，无法形成真实公允价值或目标价。",
+            "需求变化、竞争、政策和治理风险尚未用独立来源验证；风险清单仅为下一步研究问题。",
+            "COMPLETE 仅表示计划任务执行完成，不表示投资结论已得到充分验证。",
+        ])
+        summary = f"已完成 {sum(task['status'] == 'COMPLETED' for task in tasks)}/{len(tasks)} 项证据任务，取得 {len(valid)} 条可用演示证据。" 
+        summary += "本报告从估值倍数、盈利能力与风险假设整理研究框架；由于数据为 Fixture 且缺少比较基准，结论是需要补充验证，不能据此给出买卖判断。"
+        return {"title": f"估值与风险研究：{run['goal']}", "status": status, "data_notice": "DEMO DATA · 所有金融数值均为演示样本，不是真实行情或投资建议。", "executive_summary": summary, "findings": findings, "missing_information": missing, "evidence_ids": [item["id"] for item in evidence]}
+
 
     def _save_checkpoint(self, run_id: str, status: str) -> None:
         tasks = self.store.fetch_all("SELECT * FROM tasks WHERE run_id=? ORDER BY position", (run_id,))
