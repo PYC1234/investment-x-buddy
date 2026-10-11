@@ -20,6 +20,6 @@ export interface ResearchThread {
   toolCalls?: ToolCall[]; apiTools?: ToolDefinition[]; memory?: Record<string, unknown>;
   costUsd?: number | null; costStatus?: string; apiDataset?: Dataset | null;
 }
-export interface Dataset { metrics: { label: string; value: string; unit: string; note: string }[]; prices: { date: string; price: number }[]; financials: { year: string; revenue: number; profit: number }[]; findings: string[] }
+export interface Dataset { isDemo?: boolean; metrics: { label: string; value: string; unit: string; note: string }[]; prices: { date: string; price: number }[]; financials: { year: string; revenue: number; profit: number }[]; findings: string[] }
 export interface Preferences { horizon: string; risk: string; evidence: boolean }
 export type RunAction = { type: 'START'; goal: string } | { type: 'TICK' | 'PAUSE' | 'RESUME' | 'CANCEL' | 'APPROVE' | 'REJECT' | 'FAIL' | 'RECOVER'; time: string };

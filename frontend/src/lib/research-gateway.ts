@@ -70,23 +70,29 @@ function eventKind(type: string): TraceEvent['kind'] {
   return 'info';
 }
 function mapEvidence(item: ApiEvidence): ResearchEvidence {
-  return { id: item.id, title: item.title, type: item.tool_name, period: String(item.data.fiscal_year ?? item.data.as_of ?? 'Fixture snapshot'), detail: JSON.stringify(item.data, null, 2), limitation: String(item.data.missing_information ?? 'FIXTURE / DEMO DATA；并非实时金融数据。'), isDemo: item.is_demo, toolName: item.tool_name, data: item.data };
+  return { id: item.id, title: item.title, type: item.tool_name, period: String(item.data.fiscal_year ?? item.data.as_of ?? (item.is_demo ? 'Fixture snapshot' : String(item.data.timestamp_ms ?? '最新可用'))), detail: JSON.stringify(item.data, null, 2), limitation: String(item.data.missing_information ?? (item.is_demo ? 'FIXTURE / DEMO DATA；并非实时金融数据。' : '扶摇接口数据，时间以返回时间戳为准；尚未交叉核验。')), isDemo: item.is_demo, toolName: item.tool_name, data: item.data };
 }
 function mapReport(report: ApiReport | null): ResearchReportData | null {
   return report ? { title: report.title, status: report.status, dataNotice: report.data_notice, executiveSummary: report.executive_summary, findings: report.findings.map(item => ({ task: item.task, statement: item.statement, evidenceIds: item.evidence_ids })), missingInformation: report.missing_information, evidenceIds: report.evidence_ids } : null;
 }
 function evidenceDataset(items: ApiEvidence[], report: ApiReport | null): Dataset | null {
   if (!items.length) return null;
+  const snapshot = items.find(item => item.tool_name === 'get_market_snapshot')?.data;
   const valuation = items.find(item => item.tool_name === 'get_valuation_snapshot')?.data.valuation as Record<string, unknown> | null | undefined;
   const financial = items.find(item => item.tool_name === 'get_financial_summary')?.data.financials as Record<string, unknown> | null | undefined;
+  const isDemo = items.some(item => Boolean(item.is_demo));
+  const financialData = items.find(item => item.tool_name === 'get_financial_summary')?.data;
+  const prices = Array.isArray(snapshot?.prices) ? snapshot.prices as {date: string; price: number}[] : [];
+  const history = Array.isArray(financialData?.financial_history) ? financialData.financial_history as {year: string; revenue: number; profit: number}[] : [];
   return {
+    isDemo,
     metrics: [
-      { label: '市盈率 PE (TTM)', value: valuation?.pe_ttm == null ? '—' : String(valuation.pe_ttm), unit: '倍', note: 'Fixture valuation evidence' },
-      { label: '市净率 PB', value: valuation?.pb == null ? '—' : String(valuation.pb), unit: '倍', note: 'Fixture valuation evidence' },
-      { label: '净资产收益率 ROE', value: financial?.roe_percent == null ? '—' : String(financial.roe_percent), unit: '%', note: 'Fixture financial evidence' },
+      { label: '市盈率 PE (TTM)', value: valuation?.pe_ttm == null ? '—' : String(valuation.pe_ttm), unit: '倍', note: isDemo ? 'DEMO DATA' : '扶摇估值快照（PB: MRQ）' },
+      { label: '市净率 PB', value: valuation?.pb == null ? '—' : String(valuation.pb), unit: '倍', note: isDemo ? 'DEMO DATA' : '扶摇估值快照（PB: MRQ）' },
+      { label: '净资产收益率 ROE', value: financial?.roe_percent == null ? '—' : String(financial.roe_percent), unit: '%', note: isDemo ? 'DEMO DATA' : '利润表未提供 ROE' },
     ],
-    prices: [],
-    financials: [],
+    prices: prices.filter(row => typeof row.date === 'string' && Number.isFinite(row.price)),
+    financials: history.filter(row => Number.isFinite(row.revenue) && Number.isFinite(row.profit)),
     findings: report?.findings.map(item => item.statement) ?? [],
   };
 }

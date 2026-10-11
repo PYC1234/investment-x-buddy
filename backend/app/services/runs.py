@@ -186,7 +186,7 @@ class RunService:
                     result, _ = self.registry.execute(task["tool_name"], validated)
                     duration = (time.perf_counter() - call_started) * 1000
                     evidence_id = f"EVD-{uuid4().hex[:12].upper()}"
-                    self.store.execute("INSERT INTO evidence(id,run_id,task_id,tool_name,title,data_json,is_demo,created_at) VALUES(?,?,?,?,?,?,?,?)", (evidence_id, run_id, task["id"], task["tool_name"], task["title"], json.dumps(result, ensure_ascii=False), 1, now_iso()))
+                    self.store.execute("INSERT INTO evidence(id,run_id,task_id,tool_name,title,data_json,is_demo,created_at) VALUES(?,?,?,?,?,?,?,?)", (evidence_id, run_id, task["id"], task["tool_name"], task["title"], json.dumps(result, ensure_ascii=False), int(result.get("is_demo", True)), now_iso()))
                     self._record_tool_call(run_id, task, attempt, "SUCCESS", duration, result, None)
                     self.store.execute("UPDATE tasks SET status='COMPLETED',evidence_id=?,error=NULL,updated_at=? WHERE id=?", (evidence_id, now_iso(), task["id"]))
                     self._event(run_id, "tool.completed", {"task_id": task["id"], "tool_name": task["tool_name"], "evidence_id": evidence_id, "duration_ms": round(duration, 3)})
@@ -218,6 +218,35 @@ class RunService:
         run = self._run_or_404(run_id)
         tasks = self.store.fetch_all("SELECT * FROM tasks WHERE run_id=? ORDER BY position", (run_id,))
         evidence = self.store.fetch_all("SELECT * FROM evidence WHERE run_id=? ORDER BY created_at", (run_id,))
+        if any(not item["is_demo"] for item in evidence) or any(tool["data_source"] == "FUYAO / MARKET DATA" for tool in self.registry.schemas()):
+            findings = []
+            missing = [task["title"] + ": " + str(task.get("error") or "未完成") for task in tasks if task["status"] != "COMPLETED"]
+            def number(value):
+                return "未提供" if value is None else f"{value:,.2f}"
+            for item in evidence:
+                data = item["data"]
+                if item["is_demo"]:
+                    statement = "DEMO DATA：此条为演示证据，不可用于真实结论。"
+                elif "snapshot" in data:
+                    row = data["snapshot"]
+                    statement = f"扶摇行情快照：价格 {number(row.get('price_cny'))} 元，涨跌幅 {number(row.get('change_percent'))}%。取得 {len(data.get('prices', []))} 条前复权日线。快照时间戳（毫秒）{data.get('timestamp_ms')}；非交易时间为最近可用数据。"
+                elif "valuation" in data:
+                    row = data["valuation"]
+                    statement = f"估值：PE(TTM) {number(row.get('pe_ttm'))} 倍，PB(MRQ) {number(row.get('pb'))} 倍。倍数反映市场定价，缺少同业和历史区间，不能单凭倍数认定低估或高估。"
+                else:
+                    rows = data.get("financial_history", [])
+                    latest = rows[-1] if rows else {}
+                    statement = f"盈利：{latest.get('year', '最近年度')} 年营业收入 {number(latest.get('revenue'))} 亿元，归母净利润 {number(latest.get('profit'))} 亿元。"
+                    if len(rows) > 1 and rows[-2].get('revenue'):
+                        growth = (latest['revenue'] / rows[-2]['revenue'] - 1) * 100
+                        statement += f"营业收入较上一可用年度变化 {growth:.2f}%；需结合现金回款验证盈利质量。"
+                findings.append({"task": item["title"], "statement": statement, "evidence_ids": [item["id"]]})
+                if data.get("missing_information"):
+                    missing.append(data["missing_information"])
+            missing.extend(["数据来自扶摇接口，尚未与交易所原始公告交叉核验；行情时间以证据时间戳为准。", "缺少历史估值区间、同业比较、现金流和负债数据，无法可靠计算公允价值或目标价。", "风险待验证：需求与渠道回款走弱可能影响利润；利率或风险偏好变化可能压缩估值。", "COMPLETE 表示任务完成，不表示投资结论已充分验证。"])
+            if stop_reason:
+                missing.append(stop_reason)
+            return {"title": f"估值与风险研究：{run['goal']}", "status": status, "data_notice": "FUYAO / MARKET DATA · 真实接口数据；非交易时段为最近可用行情。", "executive_summary": f"完成 {len(evidence)}/{len(tasks)} 项证据任务。依据行情、年度利润表和估值快照整理研究；报告为证据驱动的规则分析，未调用收费报告模型。", "findings": findings, "missing_information": missing, "evidence_ids": [item["id"] for item in evidence]}
         by_task = {item["task_id"]: item for item in evidence}
         findings = []
         missing = []
@@ -252,7 +281,7 @@ class RunService:
             "需求变化、竞争、政策和治理风险尚未用独立来源验证；风险清单仅为下一步研究问题。",
             "COMPLETE 仅表示计划任务执行完成，不表示投资结论已得到充分验证。",
         ])
-        summary = f"已完成 {sum(task['status'] == 'COMPLETED' for task in tasks)}/{len(tasks)} 项证据任务，取得 {len(valid)} 条可用演示证据。" 
+        summary = f"已完成 {sum(task['status'] == 'COMPLETED' for task in tasks)}/{len(tasks)} 项证据任务，取得 {len(valid)} 条可用演示证据。"
         summary += "本报告从估值倍数、盈利能力与风险假设整理研究框架；由于数据为 Fixture 且缺少比较基准，结论是需要补充验证，不能据此给出买卖判断。"
         return {"title": f"估值与风险研究：{run['goal']}", "status": status, "data_notice": "DEMO DATA · 所有金融数值均为演示样本，不是真实行情或投资建议。", "executive_summary": summary, "findings": findings, "missing_information": missing, "evidence_ids": [item["id"] for item in evidence]}
 
@@ -332,7 +361,8 @@ class RunService:
 @lru_cache
 def get_run_service() -> RunService:
     settings = get_settings()
-    registry = build_tool_registry()
+    from app.services.fuyao import build_fuyao_registry
+    registry = build_fuyao_registry(settings.fuyao_api_key) if settings.finance_provider_configured else build_tool_registry()
     planner: Planner = FixturePlanner() if settings.planner_mode == "fixture" else DeepSeekPlanner(settings, registry)
     return RunService(settings, SQLiteStore(settings.sqlite_path), registry, planner)
 

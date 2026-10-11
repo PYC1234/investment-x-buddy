@@ -219,3 +219,10 @@ execution needs a managed database and job queue.
 - Automatic cloud disk provisioning or PostgreSQL migration
 - LLM-written report prose; reports are deterministic and evidence-safe
 
+
+
+## 扶摇真实数据模式
+Render Environment 配置 `FUYAO_API_KEY`，部署本版本并重启后，工具自动使用扶摇真实只读接口。`PLANNER_MODE=fixture` 可继续保留：仅计划使用固定模板，金融证据使用真实接口，不调用收费 DeepSeek。
+三个工具分别读取行情快照（附一年日线）、最近五个年度利润表和估值快照。每次完整审批执行通常产生四个 HTTP 请求；失败不切回演示数据。可设置 `MAX_TOOL_RETRIES=0` 禁止失败后重复工具请求。
+前端 `NEXT_PUBLIC_API_BASE_URL=https://investment-x-buddy.onrender.com`，修改后重新构建。旧 Run 的证据不会被替换，请创建并审批新研究。图表来自日线和年度利润表；ROE 未提供时显示空值。非交易时段显示最近可用行情，不能保证逐笔实时。
+报告使用可追溯证据生成规则分析，不调用报告 LLM；SQLite 云端持久化仍需持久磁盘。

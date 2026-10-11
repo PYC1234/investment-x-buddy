@@ -1,0 +1,79 @@
+{
+  "verified_at": "2026-10-11T06:26:09.084002+00:00",
+  "symbol": "600519.SH",
+  "max_requests": 4,
+  "actual_requests": 4,
+  "results": [
+    {
+      "capability": "market_snapshot",
+      "endpoint": "/api/a-share/prices/snapshot",
+      "requests": 1,
+      "http_status": 200,
+      "business_code": 0,
+      "record_count": 1,
+      "timestamp": 1791699967000,
+      "fields_present": {
+        "thscode": true,
+        "last_price": true,
+        "price_change_ratio_pct": true
+      },
+      "status": "VERIFIED",
+      "duration_ms": 487.1
+    },
+    {
+      "capability": "price_history",
+      "endpoint": "/api/a-share/prices/historical",
+      "requests": 1,
+      "http_status": 200,
+      "business_code": 0,
+      "record_count": 14,
+      "timestamp": 1791475200000,
+      "fields_present": {
+        "date_ms": true,
+        "close_price": true
+      },
+      "status": "VERIFIED",
+      "date_range_ms": [
+        1789315200000,
+        1791475200000
+      ],
+      "duration_ms": 86.4
+    },
+    {
+      "capability": "financial_income",
+      "endpoint": "/api/a-share/financials/income-statements",
+      "requests": 1,
+      "http_status": 200,
+      "business_code": 0,
+      "record_count": 3,
+      "timestamp": 1767110400000,
+      "fields_present": {
+        "period_end_ms": true,
+        "operating_income": true,
+        "parent_holder_net_profit": true
+      },
+      "status": "VERIFIED",
+      "date_range_ms": [
+        1703952000000,
+        1767110400000
+      ],
+      "duration_ms": 84.7
+    },
+    {
+      "capability": "valuation",
+      "endpoint": "/api/a-share/valuations/snapshot",
+      "requests": 1,
+      "http_status": 200,
+      "business_code": 0,
+      "record_count": 1,
+      "timestamp": 1791699969000,
+      "fields_present": {
+        "thscode": true,
+        "pe_ttm": true,
+        "pb_mrq": true
+      },
+      "status": "VERIFIED",
+      "duration_ms": 88.3
+    }
+  ]
+}

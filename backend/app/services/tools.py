@@ -25,12 +25,14 @@ class RegisteredTool:
     args_model: type[BaseModel]
     handler: Callable[[BaseModel], dict[str, Any]]
 
+    data_source: str = "FIXTURE / DEMO DATA"
+
     def public_schema(self) -> dict[str, Any]:
         return {
             "name": self.name,
             "description": self.description,
             "parameters": self.args_model.model_json_schema(),
-            "data_source": "FIXTURE / DEMO DATA",
+            "data_source": self.data_source,
         }
 
 
