@@ -7,6 +7,7 @@ import httpx
 from app.core.config import Settings
 from app.schemas.research import PlannedTask, ResearchPlan
 from app.services.tools import ToolRegistry
+from app.services.symbols import resolve_symbol
 
 
 @dataclass
@@ -71,13 +72,14 @@ class DeepSeekPlanner:
 
 class FixturePlanner:
     async def plan(self, goal: str, preferences: dict[str, Any]) -> PlanResult:
+        symbol = resolve_symbol(goal)
         simulate_failure = "[simulate-failure]" in goal.lower()
         plan = ResearchPlan(
             research_goal=goal,
             tasks=[
-                PlannedTask(title="Collect market snapshot", tool_name="get_market_snapshot", arguments={"symbol": "600519.SH"}, rationale="Establish the fixture market context."),
-                PlannedTask(title="Review profitability", tool_name="get_financial_summary", arguments={"symbol": "600519.SH", "fiscal_year": 2025, "simulate_failure": simulate_failure}, rationale="Inspect available fixture profitability indicators."),
-                PlannedTask(title="Review valuation", tool_name="get_valuation_snapshot", arguments={"symbol": "600519.SH"}, rationale="Inspect available fixture valuation indicators."),
+                PlannedTask(title="Collect market snapshot", tool_name="get_market_snapshot", arguments={"symbol": symbol}, rationale="获取已识别标的的行情快照与历史日线。"),
+                PlannedTask(title="Review profitability", tool_name="get_financial_summary", arguments={"symbol": symbol, "fiscal_year": 2025, "simulate_failure": simulate_failure}, rationale="查看已识别标的的最新可用年度财务指标。"),
+                PlannedTask(title="Review valuation", tool_name="get_valuation_snapshot", arguments={"symbol": symbol}, rationale="查看已识别标的的估值指标。"),
             ],
         )
         return PlanResult(plan=plan, mode="fixture")

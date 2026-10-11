@@ -6,12 +6,13 @@ from app.services.tools import ToolExecutionError
 from test_run_flow import build_service, api_client
 
 
-def setup_provider(monkeypatch, fail=False):
+def setup_provider(monkeypatch, fail=False, expected_symbol="600519.SH"):
     calls = []
     original = httpx.Client
     def respond(request):
         calls.append(request.url.path)
         assert request.headers["X-api-key"] == "test-secret"
+        assert (request.url.params.get("thscodes") or request.url.params.get("thscode")) == expected_symbol
         if fail:
             return httpx.Response(401, json={"error": "test-secret"})
         if "historical" in request.url.path:

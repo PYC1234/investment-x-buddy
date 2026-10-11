@@ -104,10 +104,11 @@ export function applyBundle(thread: ResearchThread, bundle: RunBundle): Research
   const calls: ToolCall[] = bundle.toolCalls.map(call => ({ id: call.id, toolName: call.tool_name, attempt: call.attempt, status: call.status, durationMs: call.duration_ms, error: call.error }));
   const latest = bundle.checkpoints.at(-1);
   const code = String(tasks.find(task => typeof task.arguments.symbol === 'string')?.arguments.symbol ?? thread.code);
+  const companyNames: Record<string, string> = { '600519.SH': '贵州茅台', '300750.SZ': '宁德时代', '000001.SZ': '平安银行', '000858.SZ': '五粮液', '600036.SH': '招商银行', '601318.SH': '中国平安' };
   const totalLatency = calls.reduce((sum, call) => sum + call.durationMs, 0) / 1000;
   return {
     ...thread, remoteRunId: run.id, remoteThreadId: run.thread_id, goal: run.goal, title: run.goal.slice(0, 60),
-    company: code === '600519.SH' ? '贵州茅台' : thread.company, code, sector: code === '600519.SH' ? '食品饮料' : thread.sector,
+    company: companyNames[code] ?? (code || '尚未指定证券'), code, sector: code === '600519.SH' || code === '000858.SZ' ? '食品饮料' : code === '300750.SZ' ? '电池' : ['000001.SZ', '600036.SH', '601318.SH'].includes(code) ? '金融' : '',
     status: uiStatus(run.status), apiStatus: run.status, approval: run.status === 'REJECTED' ? 'rejected' : run.approval ? 'approved' : 'pending',
     step: tasks.filter(task => task.status === 'COMPLETED').length, planVersion: run.plan_version, plannerMode: run.planner_mode,
     tasks, apiEvidence: mappedEvidence, apiReport: mapReport(bundle.report), toolCalls: calls,

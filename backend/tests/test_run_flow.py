@@ -78,7 +78,7 @@ async def test_end_to_end_persists_evidence_report_checkpoint_and_memory(tmp_pat
 async def test_fixture_failure_retries_and_returns_partial(tmp_path: Path) -> None:
     settings, service = build_service(tmp_path / "failure.db")
     async with await api_client(settings, service) as client:
-        run = (await client.post("/api/v1/runs", json={"goal": "[simulate-failure] Analyze demo data"})).json()
+        run = (await client.post("/api/v1/runs", json={"goal": "[simulate-failure] Analyze Moutai demo data"})).json()
         response = await client.post(f"/api/v1/runs/{run['id']}/approve", json={"plan_version": 1, "allowed_tools": [task["tool_name"] for task in run["tasks"]]})
         result = response.json()
         assert result["status"] == "PARTIAL"
@@ -93,7 +93,7 @@ async def test_fixture_failure_retries_and_returns_partial(tmp_path: Path) -> No
 async def test_tool_call_budget_stops_with_partial_result(tmp_path: Path) -> None:
     settings, service = build_service(tmp_path / "budget.db", max_tool_calls=1)
     async with await api_client(settings, service) as client:
-        run = (await client.post("/api/v1/runs", json={"goal": "Analyze demo data"})).json()
+        run = (await client.post("/api/v1/runs", json={"goal": "Analyze Moutai demo data"})).json()
         result = (await client.post(f"/api/v1/runs/{run['id']}/approve", json={"plan_version": 1, "allowed_tools": [task["tool_name"] for task in run["tasks"]]})).json()
         assert result["status"] == "PARTIAL"
         assert result["error"] == "max_tool_calls"

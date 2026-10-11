@@ -12,6 +12,7 @@ from app.core.errors import AppError
 from app.schemas.research import ApprovalRequest, CreateRunRequest, RejectRequest
 from app.services.planner import DeepSeekPlanner, FixturePlanner, Planner
 from app.services.store import SQLiteStore
+from app.services.symbols import SymbolResolutionError
 from app.services.tools import ToolExecutionError, ToolRegistry, build_tool_registry
 
 
@@ -64,6 +65,10 @@ class RunService:
             result = await self.planner.plan(request.goal, preferences)
             for task in result.plan.tasks:
                 self.registry.validate(task.tool_name, task.arguments)
+        except SymbolResolutionError as exc:
+            self.store.execute("UPDATE runs SET status='FAILED',error=?,updated_at=? WHERE id=?", (str(exc), now_iso(), run_id))
+            self._event(run_id, "plan.invalid", {"error": str(exc)})
+            raise AppError(status_code=422, code="invalid_symbol", message=str(exc)) from exc
         except (ValueError, json.JSONDecodeError) as exc:
             self.store.execute("UPDATE runs SET status='FAILED',error=?,updated_at=? WHERE id=?", (str(exc), now_iso(), run_id))
             self._event(run_id, "plan.invalid", {"error": "Planner returned an invalid or unauthorized plan."})
