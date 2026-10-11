@@ -1,6 +1,6 @@
 import json
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from functools import lru_cache
 from typing import Any
 from uuid import uuid4
@@ -224,6 +224,9 @@ class RunService:
         tasks = self.store.fetch_all("SELECT * FROM tasks WHERE run_id=? ORDER BY position", (run_id,))
         evidence = self.store.fetch_all("SELECT * FROM evidence WHERE run_id=? ORDER BY created_at", (run_id,))
         if any(not item["is_demo"] for item in evidence) or any(tool["data_source"] == "FUYAO / MARKET DATA" for tool in self.registry.schemas()):
+            symbols = {task["arguments"].get("symbol") for task in tasks}
+            is_bank = bool(symbols & {"600036.SH", "000001.SZ"})
+            bank_risk = is_bank and ("风险" in run["goal"] or "risk" in run["goal"].lower())
             findings = []
             missing = [task["title"] + ": " + str(task.get("error") or "未完成") for task in tasks if task["status"] != "COMPLETED"]
             def number(value):
@@ -234,7 +237,7 @@ class RunService:
                     statement = "DEMO DATA：此条为演示证据，不可用于真实结论。"
                 elif "snapshot" in data:
                     row = data["snapshot"]
-                    statement = f"扶摇行情快照：价格 {number(row.get('price_cny'))} 元，涨跌幅 {number(row.get('change_percent'))}%。取得 {len(data.get('prices', []))} 条前复权日线。快照时间戳（毫秒）{data.get('timestamp_ms')}；非交易时间为最近可用数据。"
+                    statement = f"扶摇行情快照：价格 {number(row.get('price_cny'))} 元，涨跌幅 {number(row.get('change_percent'))}%。取得 {len(data.get('prices', []))} 条前复权日线。数据时间（北京时间）{datetime.fromtimestamp(data["timestamp_ms"]/1000, timezone(timedelta(hours=8))).strftime("%Y-%m-%d %H:%M:%S") if isinstance(data.get("timestamp_ms"), (int, float)) else "未提供"}；非交易时间为最近可用数据。"
                 elif "valuation" in data:
                     row = data["valuation"]
                     statement = f"估值：PE(TTM) {number(row.get('pe_ttm'))} 倍，PB(MRQ) {number(row.get('pb'))} 倍。倍数反映市场定价，缺少同业和历史区间，不能单凭倍数认定低估或高估。"
@@ -244,14 +247,21 @@ class RunService:
                     statement = f"盈利：{latest.get('year', '最近年度')} 年营业收入 {number(latest.get('revenue'))} 亿元，归母净利润 {number(latest.get('profit'))} 亿元。"
                     if len(rows) > 1 and rows[-2].get('revenue'):
                         growth = (latest['revenue'] / rows[-2]['revenue'] - 1) * 100
-                        statement += f"营业收入较上一可用年度变化 {growth:.2f}%；需结合现金回款验证盈利质量。"
+                        statement += f"营业收入较上一可用年度变化 {growth:.2f}%；"
+                        statement += "银行盈利需结合净息差、信用减值与非息收入验证，利润表总额不足以判断资产质量。" if is_bank else "需结合现金回款验证盈利质量。"
                 findings.append({"task": item["title"], "statement": statement, "evidence_ids": [item["id"]]})
                 if data.get("missing_information"):
                     missing.append(data["missing_information"])
-            missing.extend(["数据来自扶摇接口，尚未与交易所原始公告交叉核验；行情时间以证据时间戳为准。", "缺少历史估值区间、同业比较、现金流和负债数据，无法可靠计算公允价值或目标价。", "风险待验证：需求与渠道回款走弱可能影响利润；利率或风险偏好变化可能压缩估值。", "COMPLETE 表示任务完成，不表示投资结论已充分验证。"])
+            if bank_risk:
+                findings.append({"task": "银行风险研究覆盖", "statement": "现有证据仅覆盖价格、年度营收与利润、估值倍数。尚未取得不良贷款率、关注及逾期贷款、拨备覆盖率、净息差、核心一级资本充足率和重点行业贷款敞口，无法判断资产质量、资本缓冲或流动性风险。以下为待核验方向，不代表这些风险已发生。", "evidence_ids": []})
+            if is_bank:
+                missing.extend(["银行专属数据缺失：不良贷款率、关注及逾期贷款、拨备覆盖率、净息差、核心一级资本充足率、流动性指标与房地产等重点行业贷款敞口。", "待核验风险：资产质量变化、信用减值压力、净息差变化及资本与流动性缓冲；不能从现有利润表推断风险已发生。", "PB 低于 1 不自动代表低估，需结合 ROE、资产质量、资本要求与历史同业比较。"])
+            else:
+                missing.append("风险待验证：需求与渠道回款走弱可能影响利润；利率或风险偏好变化可能压缩估值。")
+            missing.extend(["数据来自扶摇接口，尚未与交易所原始公告交叉核验；行情时间以证据记录为准。", "缺少历史估值区间、同业比较及完整财务报表，无法可靠计算公允价值或目标价。", "年度变化为相邻可用年度比较，仍需核对报表口径、会计调整及可比性，不能据此解释变化原因。", "COMPLETE 表示任务执行完成；研究覆盖有限，不表示风险核验已完成。"])
             if stop_reason:
                 missing.append(stop_reason)
-            return {"title": f"估值与风险研究：{run['goal']}", "status": status, "data_notice": "FUYAO / MARKET DATA · 真实接口数据；非交易时段为最近可用行情。", "executive_summary": f"完成 {len(evidence)}/{len(tasks)} 项证据任务。依据行情、年度利润表和估值快照整理研究；报告为证据驱动的规则分析，未调用收费报告模型。", "findings": findings, "missing_information": missing, "evidence_ids": [item["id"] for item in evidence]}
+            return {"title": f"{'银行风险初步研究' if bank_risk else '研究摘要'}：{run['goal']}", "status": status, "data_notice": "FUYAO / MARKET DATA · 真实接口数据；非交易时段为最近可用行情。", "coverage_status": "LIMITED", "executive_summary": f"完成 {len(evidence)}/{len(tasks)} 项证据任务。以下仅依据已获取的行情、年度利润表与估值快照整理。研究覆盖有限，不能替代完整风险评估。", "findings": findings, "missing_information": missing, "evidence_ids": [item["id"] for item in evidence]}
         by_task = {item["task_id"]: item for item in evidence}
         findings = []
         missing = []

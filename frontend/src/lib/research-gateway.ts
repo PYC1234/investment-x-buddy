@@ -21,7 +21,7 @@ export const configuredMode: AppMode = rawBase ? 'api' : 'demo';
 async function request<T>(path: string, init?: RequestInit): Promise<ApiResult<T>> {
   if (!rawBase) return { ok: false, error: '未配置 NEXT_PUBLIC_API_BASE_URL' };
   try {
-    const response = await fetch(`${rawBase}${path}`, { ...init, headers: { 'Content-Type': 'application/json', ...init?.headers } });
+    const response = await fetch(`${rawBase}${path}`, { cache: 'no-store', ...init, headers: { 'Content-Type': 'application/json', ...init?.headers } });
     if (!response.ok) {
       let detail = '';
       try { const body = await response.json() as { error?: { message?: string } }; detail = body.error?.message ? ` · ${body.error.message}` : ''; } catch { /* non-JSON error */ }
@@ -69,8 +69,19 @@ function eventKind(type: string): TraceEvent['kind'] {
   if (type.includes('completed') || type.includes('approved') || type.includes('saved')) return 'success';
   return 'info';
 }
+function formatMetric(value: unknown): string {
+  if (value === null || value === undefined || value === '') return '—';
+  const number = Number(value);
+  return Number.isFinite(number) ? number.toFixed(2) : '—';
+}
+function evidencePeriod(item: ApiEvidence): string {
+  if (item.data.fiscal_year != null) return `${item.data.fiscal_year} 年度`;
+  const timestamp = item.data.timestamp_ms;
+  if (typeof timestamp === 'number' && Number.isFinite(timestamp)) return new Date(timestamp).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false }) + '（北京时间）';
+  return String(item.data.as_of ?? (item.is_demo ? 'Fixture snapshot' : '时间未提供'));
+}
 function mapEvidence(item: ApiEvidence): ResearchEvidence {
-  return { id: item.id, title: item.title, type: item.tool_name, period: String(item.data.fiscal_year ?? item.data.as_of ?? (item.is_demo ? 'Fixture snapshot' : String(item.data.timestamp_ms ?? '最新可用'))), detail: JSON.stringify(item.data, null, 2), limitation: String(item.data.missing_information ?? (item.is_demo ? 'FIXTURE / DEMO DATA；并非实时金融数据。' : '扶摇接口数据，时间以返回时间戳为准；尚未交叉核验。')), isDemo: item.is_demo, toolName: item.tool_name, data: item.data };
+  return { id: item.id, title: item.title, type: item.tool_name, period: evidencePeriod(item), detail: JSON.stringify(item.data, null, 2), limitation: String(item.data.missing_information ?? (item.is_demo ? 'FIXTURE / DEMO DATA；并非实时金融数据。' : '扶摇接口数据，时间以返回时间戳为准；尚未交叉核验。')), isDemo: item.is_demo, toolName: item.tool_name, data: item.data };
 }
 function mapReport(report: ApiReport | null): ResearchReportData | null {
   return report ? { title: report.title, status: report.status, dataNotice: report.data_notice, executiveSummary: report.executive_summary, findings: report.findings.map(item => ({ task: item.task, statement: item.statement, evidenceIds: item.evidence_ids })), missingInformation: report.missing_information, evidenceIds: report.evidence_ids } : null;
@@ -87,9 +98,9 @@ function evidenceDataset(items: ApiEvidence[], report: ApiReport | null): Datase
   return {
     isDemo,
     metrics: [
-      { label: '市盈率 PE (TTM)', value: valuation?.pe_ttm == null ? '—' : String(valuation.pe_ttm), unit: '倍', note: isDemo ? 'DEMO DATA' : '扶摇估值快照（PB: MRQ）' },
-      { label: '市净率 PB', value: valuation?.pb == null ? '—' : String(valuation.pb), unit: '倍', note: isDemo ? 'DEMO DATA' : '扶摇估值快照（PB: MRQ）' },
-      { label: '净资产收益率 ROE', value: financial?.roe_percent == null ? '—' : String(financial.roe_percent), unit: '%', note: isDemo ? 'DEMO DATA' : '利润表未提供 ROE' },
+      { label: '市盈率 PE (TTM)', value: formatMetric(valuation?.pe_ttm), unit: '倍', note: isDemo ? 'DEMO DATA' : '扶摇 · PE(TTM)' },
+      { label: '市净率 PB', value: formatMetric(valuation?.pb), unit: '倍', note: isDemo ? 'DEMO DATA' : '扶摇 · PB(MRQ)' },
+      { label: '净资产收益率 ROE', value: formatMetric(financial?.roe_percent), unit: '%', note: isDemo ? 'DEMO DATA' : '利润表未提供 ROE' },
     ],
     prices: prices.filter(row => typeof row.date === 'string' && Number.isFinite(row.price)),
     financials: history.filter(row => Number.isFinite(row.revenue) && Number.isFinite(row.profit)),

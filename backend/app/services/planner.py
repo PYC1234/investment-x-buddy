@@ -73,12 +73,13 @@ class DeepSeekPlanner:
 class FixturePlanner:
     async def plan(self, goal: str, preferences: dict[str, Any]) -> PlanResult:
         symbol = resolve_symbol(goal)
+        bank_risk = symbol in {"600036.SH", "000001.SZ"} and ("风险" in goal or "risk" in goal.lower())
         simulate_failure = "[simulate-failure]" in goal.lower()
         plan = ResearchPlan(
             research_goal=goal,
             tasks=[
                 PlannedTask(title="Collect market snapshot", tool_name="get_market_snapshot", arguments={"symbol": symbol}, rationale="获取已识别标的的行情快照与历史日线。"),
-                PlannedTask(title="Review profitability", tool_name="get_financial_summary", arguments={"symbol": symbol, "fiscal_year": 2025, "simulate_failure": simulate_failure}, rationale="查看已识别标的的最新可用年度财务指标。"),
+                PlannedTask(title="银行利润表概览（风险指标待补充）" if bank_risk else "Review profitability", tool_name="get_financial_summary", arguments={"symbol": symbol, "fiscal_year": 2025, "simulate_failure": simulate_failure}, rationale="当前只读利润表；不良贷款率、拨备覆盖率、净息差与资本充足率尚未接入，风险研究覆盖有限。" if bank_risk else "查看已识别标的的最新可用年度财务指标。"),
                 PlannedTask(title="Review valuation", tool_name="get_valuation_snapshot", arguments={"symbol": symbol}, rationale="查看已识别标的的估值指标。"),
             ],
         )

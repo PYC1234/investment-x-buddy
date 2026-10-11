@@ -13,3 +13,14 @@
 # NEXT_PUBLIC_API_BASE_URL stays unset until the Render backend is public.
 # Configure it in the Netlify UI (build environment), then trigger a new deploy
 # to enable API mode.
+
+# Revalidate the entry document so a refreshed page loads the latest hashed JS.
+[[headers]]
+  for = "/"
+  [headers.values]
+    Cache-Control = "no-cache, max-age=0, must-revalidate"
+
+[[headers]]
+  for = "/*.html"
+  [headers.values]
+    Cache-Control = "no-cache, max-age=0, must-revalidate"
