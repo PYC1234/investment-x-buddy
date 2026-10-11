@@ -224,6 +224,9 @@ class RunService:
         tasks = self.store.fetch_all("SELECT * FROM tasks WHERE run_id=? ORDER BY position", (run_id,))
         evidence = self.store.fetch_all("SELECT * FROM evidence WHERE run_id=? ORDER BY created_at", (run_id,))
         if any(not item["is_demo"] for item in evidence) or any(tool["data_source"] == "FUYAO / MARKET DATA" for tool in self.registry.schemas()):
+            focus = (run.get("plan") or {}).get("research_type", "comprehensive")
+            scope = (run.get("plan") or {}).get("scope") or [task["title"] for task in tasks]
+            focus_title = {"profitability": "盈利能力初步研究", "valuation": "估值初步研究", "risk": "风险线索初步研究", "comprehensive": "综合研究摘要"}[focus]
             symbols = {task["arguments"].get("symbol") for task in tasks}
             is_bank = bool(symbols & {"600036.SH", "000001.SZ"})
             bank_risk = is_bank and ("风险" in run["goal"] or "risk" in run["goal"].lower())
@@ -261,7 +264,7 @@ class RunService:
             missing.extend(["数据来自扶摇接口，尚未与交易所原始公告交叉核验；行情时间以证据记录为准。", "缺少历史估值区间、同业比较及完整财务报表，无法可靠计算公允价值或目标价。", "年度变化为相邻可用年度比较，仍需核对报表口径、会计调整及可比性，不能据此解释变化原因。", "COMPLETE 表示任务执行完成；研究覆盖有限，不表示风险核验已完成。"])
             if stop_reason:
                 missing.append(stop_reason)
-            return {"title": f"{'银行风险初步研究' if bank_risk else '研究摘要'}：{run['goal']}", "status": status, "data_notice": "FUYAO / MARKET DATA · 真实接口数据；非交易时段为最近可用行情。", "coverage_status": "LIMITED", "executive_summary": f"完成 {len(evidence)}/{len(tasks)} 项证据任务。以下仅依据已获取的行情、年度利润表与估值快照整理。研究覆盖有限，不能替代完整风险评估。", "findings": findings, "missing_information": missing, "evidence_ids": [item["id"] for item in evidence]}
+            return {"title": f"{'银行风险初步研究' if bank_risk else focus_title}：{run['goal']}", "status": status, "data_notice": "FUYAO / MARKET DATA · 真实接口数据；非交易时段为最近可用行情。", "coverage_status": "LIMITED", "executive_summary": f"完成 {len(evidence)}/{len(tasks)} 项证据任务。本次范围：{'；'.join(scope)}。报告仅依据取得的证据整理；研究覆盖有限，不能替代完整核验。", "findings": findings, "missing_information": missing, "evidence_ids": [item["id"] for item in evidence]}
         by_task = {item["task_id"]: item for item in evidence}
         findings = []
         missing = []

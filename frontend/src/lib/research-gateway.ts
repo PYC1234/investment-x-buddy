@@ -4,7 +4,7 @@ import type { ApiRunStatus, Dataset, Preferences, ResearchEvidence, ResearchRepo
 export type AppMode = 'api' | 'demo';
 export type ApiResult<T> = { ok: true; data: T } | { ok: false; error: string };
 export interface ApiTask { id: string; position: number; title: string; tool_name: string; arguments: Record<string, unknown>; rationale: string; status: string; attempts: number; evidence_id: string | null; error: string | null }
-export interface ApiPlan { research_goal: string; tasks: Array<{ title: string; tool_name: string; arguments: Record<string, unknown>; rationale: string }> }
+export interface ApiPlan { research_type?: string; scope?: string[]; limitations?: string[]; research_goal: string; tasks: Array<{ title: string; tool_name: string; arguments: Record<string, unknown>; rationale: string }> }
 export interface ApiReport { title: string; status: string; data_notice: string; executive_summary: string; findings: Array<{ task: string; statement: string; evidence_ids: string[] }>; missing_information: string[]; evidence_ids: string[] }
 export interface ApiRun { id: string; thread_id: string; goal: string; status: ApiRunStatus; plan_version: number; planner_mode: string; plan: ApiPlan | null; approval: { plan_version: number; allowed_tools: string[]; approved_at: string } | null; report: ApiReport | null; error: string | null; created_at: string; updated_at: string; started_at: string | null; completed_at: string | null; tasks: ApiTask[]; usage: { prompt_tokens: number; completion_tokens: number; total_tokens: number; estimated_cost_usd: number | null; cost_status: string } }
 export interface ApiEvent { id: number; event_type: string; data: Record<string, unknown>; created_at: string }
@@ -122,6 +122,7 @@ export function applyBundle(thread: ResearchThread, bundle: RunBundle): Research
     company: companyNames[code] ?? (code || '尚未指定证券'), code, sector: code === '600519.SH' || code === '000858.SZ' ? '食品饮料' : code === '300750.SZ' ? '电池' : ['000001.SZ', '600036.SH', '601318.SH'].includes(code) ? '金融' : '',
     status: uiStatus(run.status), apiStatus: run.status, approval: run.status === 'REJECTED' ? 'rejected' : run.approval ? 'approved' : 'pending',
     step: tasks.filter(task => task.status === 'COMPLETED').length, planVersion: run.plan_version, plannerMode: run.planner_mode,
+    researchScope: run.plan ? { type: run.plan.research_type ?? 'comprehensive', scope: run.plan.scope ?? [], limitations: run.plan.limitations ?? [] } : undefined,
     tasks, apiEvidence: mappedEvidence, apiReport: mapReport(bundle.report), toolCalls: calls,
     apiTools: bundle.tools.map((tool): ToolDefinition => ({ name: tool.name, description: tool.description, permission: tool.data_source, parameters: tool.parameters })),
     memory: bundle.memory, calls: calls.length, tokens: run.usage.total_tokens, latency: totalLatency,

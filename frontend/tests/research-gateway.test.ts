@@ -1,3 +1,6 @@
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { ResearchPlan } from '../src/components/research-plan';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { applyBundle, type RunBundle } from '../src/lib/research-gateway';
@@ -39,4 +42,29 @@ test('缺失序列保持空白，不填充 Demo 曲线；Demo 仍有明确标识
   const demo = applyBundle(initialThreads[0], bundle(true));
   assert.equal(demo.apiDataset?.isDemo, true);
   assert.equal(demo.apiDataset?.metrics[0].note, 'DEMO DATA');
+});
+
+
+test('确认卡范围来自后端计划，而非前端猜测', () => {
+  const input = bundle();
+  input.run.plan = {research_goal: input.run.goal, research_type: 'risk', scope: ['最近行情', '年度利润表'], limitations: ['不良贷款率尚未接入'], tasks: []};
+  const result = applyBundle(initialThreads[0], input);
+  assert.equal(result.researchScope?.type, 'risk');
+  assert.deepEqual(result.researchScope?.scope, ['最近行情', '年度利润表']);
+  assert.deepEqual(result.researchScope?.limitations, ['不良贷款率尚未接入']);
+});
+
+
+test('审批页面渲染标的、范围、缺口与批准按钮', () => {
+  const input = bundle();
+  input.run.status = 'PENDING_APPROVAL';
+  input.run.plan = {research_goal: input.run.goal, research_type: 'risk', scope: ['年度利润表'], limitations: ['不良贷款率尚未接入'], tasks: []};
+  const thread = applyBundle(initialThreads[0], input);
+  const html = renderToStaticMarkup(createElement(ResearchPlan, {thread, expanded: null, setExpanded: () => {}, onAction: () => {}, mode: 'api'}));
+  assert.match(html, /本次研究确认/);
+  assert.match(html, /招商银行/);
+  assert.match(html, /600036.SH/);
+  assert.match(html, /年度利润表/);
+  assert.match(html, /不良贷款率尚未接入/);
+  assert.match(html, /批准并执行/);
 });

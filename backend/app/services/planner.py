@@ -70,18 +70,31 @@ class DeepSeekPlanner:
         )
 
 
+def classify_research_goal(goal: str) -> str:
+    text = goal.lower()
+    intents = set()
+    if any(word in text for word in ("盈利", "利润", "profitability", "earnings")):
+        intents.add("profitability")
+    if any(word in text for word in ("估值", "valuation", "市盈率", "市净率")):
+        intents.add("valuation")
+    if any(word in text for word in ("风险", "risk")):
+        intents.add("risk")
+    return next(iter(intents)) if len(intents) == 1 else "comprehensive"
+
+
 class FixturePlanner:
     async def plan(self, goal: str, preferences: dict[str, Any]) -> PlanResult:
         symbol = resolve_symbol(goal)
+        focus = classify_research_goal(goal)
         bank_risk = symbol in {"600036.SH", "000001.SZ"} and ("风险" in goal or "risk" in goal.lower())
         simulate_failure = "[simulate-failure]" in goal.lower()
-        plan = ResearchPlan(
-            research_goal=goal,
-            tasks=[
-                PlannedTask(title="Collect market snapshot", tool_name="get_market_snapshot", arguments={"symbol": symbol}, rationale="获取已识别标的的行情快照与历史日线。"),
-                PlannedTask(title="银行利润表概览（风险指标待补充）" if bank_risk else "Review profitability", tool_name="get_financial_summary", arguments={"symbol": symbol, "fiscal_year": 2025, "simulate_failure": simulate_failure}, rationale="当前只读利润表；不良贷款率、拨备覆盖率、净息差与资本充足率尚未接入，风险研究覆盖有限。" if bank_risk else "查看已识别标的的最新可用年度财务指标。"),
-                PlannedTask(title="Review valuation", tool_name="get_valuation_snapshot", arguments={"symbol": symbol}, rationale="查看已识别标的的估值指标。"),
-            ],
-        )
+        market = PlannedTask(title="行情快照与历史走势", tool_name="get_market_snapshot", arguments={"symbol": symbol}, rationale="查看最近可用行情与前复权日线；价格波动不等于基本面风险。")
+        financial = PlannedTask(title="银行利润表概览（风险指标待补充）" if bank_risk else "年度盈利与增长概览", tool_name="get_financial_summary", arguments={"symbol": symbol, "fiscal_year": 2025, "simulate_failure": simulate_failure}, rationale="当前只读利润表；不良贷款率、拨备覆盖率、净息差与资本充足率尚未接入，风险研究覆盖有限。" if bank_risk else "查看最新可用年度利润表与营收、归母利润趋势；不能替代现金流和资产负债分析。")
+        valuation = PlannedTask(title="估值倍数核对", tool_name="get_valuation_snapshot", arguments={"symbol": symbol}, rationale="查看 PE(TTM) 与 PB(MRQ)；缺少历史和同业基准，不直接计算目标价。")
+        tasks = {"profitability": [financial], "valuation": [valuation, financial], "risk": [market, financial, valuation], "comprehensive": [market, financial, valuation]}[focus]
+        scope_names = {"get_market_snapshot": "最近行情与一年历史日线", "get_financial_summary": "最新可用五个年度利润表", "get_valuation_snapshot": "PE(TTM)、PB(MRQ) 估值快照"}
+        limitations = ["未接入完整资产负债表与现金流量表，无法完整核验盈利质量。", "没有历史估值与同业比较，不提供公允价值或目标价。"]
+        if focus == "risk" or bank_risk:
+            limitations.append("银行不良贷款率、拨备覆盖率、净息差、资本与流动性指标尚未接入；仅提供风险线索。" if bank_risk else "风险事件、公告及行业数据尚未接入；仅提供风险线索，不能完成全面风险评估。")
+        plan = ResearchPlan(research_goal=goal, research_type=focus, tasks=tasks, scope=[scope_names[t.tool_name] for t in tasks], limitations=limitations)
         return PlanResult(plan=plan, mode="fixture")
-

@@ -34,7 +34,7 @@ async def test_real_provider_pipeline_with_mock_http(monkeypatch, tmp_path):
     settings, service = build_service(tmp_path / "real.db")
     service.registry = registry
     async with await api_client(settings, service) as client:
-        run = (await client.post("/api/v1/runs", json={"goal": "分析贵州茅台估值"})).json()
+        run = (await client.post("/api/v1/runs", json={"goal": "分析贵州茅台盈利与估值"})).json()
         assert not calls
         result = await client.post(f"/api/v1/runs/{run['id']}/approve", json={"plan_version": 1, "allowed_tools": list(registry.names())})
         assert result.json()["status"] == "COMPLETE"

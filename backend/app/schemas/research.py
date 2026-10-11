@@ -24,6 +24,9 @@ class PlannedTask(BaseModel):
 
 
 class ResearchPlan(BaseModel):
+    research_type: Literal["profitability", "valuation", "risk", "comprehensive"] = "comprehensive"
+    scope: list[str] = Field(default_factory=list)
+    limitations: list[str] = Field(default_factory=list)
     research_goal: str = Field(min_length=1, max_length=1000)
     tasks: list[PlannedTask] = Field(min_length=1, max_length=8)
 

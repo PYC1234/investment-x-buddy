@@ -236,3 +236,9 @@ Render Environment 配置 `FUYAO_API_KEY`，部署本版本并重启后，工具
 ## 报告研究覆盖
 真实数据报告返回 `coverage_status=LIMITED`；COMPLETE 只表示任务执行完成。招商银行与平安银行的风险研究会列出银行指标缺失和待核验方向，不把缺少的数据写成已发生风险。历史报告保持原样，新报告在新 Run 执行后生成。
 前端映射回归测试：在 frontend 目录执行 `node --import tsx --test tests/research-gateway.test.ts`。
+
+
+## 按目标规划与确认范围
+FixturePlanner 使用确定性关键词规则：单一盈利目标只查询利润表；单一估值目标查询估值和利润表；风险目标或多个目标查询行情、利润表、估值。无明确分类时为综合研究；不新增付费模型调用。
+Plan 新增兼容字段 `research_type`（profitability/valuation/risk/comprehensive）、`scope`、`limitations`，前端 Plan 页在审批前显示研究确认卡。未支持的风险数据明确列为缺口，不创建假工具任务。报告摘要列出本次实际计划范围。
+固定验收集见 `tests/test_research_scope.py`、`tests/test_symbols.py`、`tests/test_bank_report.py` 及前端 `tests/research-gateway.test.ts`。此分类器不等同于自由语义规划；名称主数据覆盖及银行专属指标仍有限。

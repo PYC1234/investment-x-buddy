@@ -30,7 +30,7 @@ async def test_other_stock_plan_approval_tools(monkeypatch, tmp_path):
     settings, service = build_service(tmp_path / "other.db")
     service.registry = registry
     async with await api_client(settings, service) as client:
-        run = (await client.post("/api/v1/runs", json={"goal": "分析宁德时代 300750.SZ 估值"})).json()
+        run = (await client.post("/api/v1/runs", json={"goal": "分析宁德时代 300750.SZ 盈利与估值"})).json()
         assert run["status"] == "PENDING_APPROVAL" and not calls
         assert all(task["arguments"]["symbol"] == "300750.SZ" for task in run["tasks"])
         response = await client.post(f"/api/v1/runs/{run['id']}/approve", json={"plan_version": 1, "allowed_tools": list(registry.names())})

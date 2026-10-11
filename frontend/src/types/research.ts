@@ -15,6 +15,7 @@ export interface ResearchThread {
   status: RunStatus; step: number; approval: 'pending' | 'approved' | 'rejected';
   tab: WorkspaceTab; events: TraceEvent[]; calls: number; tokens: number; latency: number;
   updated: string; checkpoint: Checkpoint | null; recovered: boolean;
+  researchScope?: { type: string; scope: string[]; limitations: string[] };
   apiStatus?: ApiRunStatus; planVersion?: number; plannerMode?: string; loading?: boolean;
   tasks?: ResearchTask[]; apiEvidence?: ResearchEvidence[]; apiReport?: ResearchReportData | null;
   toolCalls?: ToolCall[]; apiTools?: ToolDefinition[]; memory?: Record<string, unknown>;

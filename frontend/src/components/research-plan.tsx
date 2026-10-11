@@ -13,8 +13,18 @@ export function ResearchPlan({ thread, expanded, setExpanded, onAction, mode }: 
     : demoSteps.map((step, index) => ({ ...step, status: index < thread.step ? 'COMPLETED' : 'PENDING', error: null, attempts: 0 }));
   const total = Math.max(steps.length, 1);
   return <div className="plan-stack">
+    {mode === 'api' && steps.length > 0 && <section className="card p-5" aria-label="本次研究确认">
+      <h2 className="mb-3 font-semibold">本次研究确认</h2>
+      <dl className="space-y-2 text-sm">
+        <div><dt className="inline text-slate-500">研究标的：</dt><dd className="inline">{thread.company} · {thread.code} · 沪深 A 股</dd></div>
+        <div><dt className="inline text-slate-500">研究重点：</dt><dd className="inline">{({profitability: '盈利能力', valuation: '估值分析', risk: '风险线索', comprehensive: '综合研究'} as Record<string, string>)[thread.researchScope?.type ?? 'comprehensive'] ?? '综合研究'}</dd></div>
+        <div><dt className="inline text-slate-500">数据范围：</dt><dd className="inline">{thread.researchScope?.scope.length ? thread.researchScope.scope.join('；') : steps.map(step => step.title).join('；')}</dd></div>
+        <div><dt className="inline text-slate-500">工具来源：</dt><dd className="inline">{thread.apiTools?.some(tool => tool.permission.includes('FUYAO')) ? '扶摇真实接口；行情为最近可用数据' : '来源以注册工具及执行后证据为准'}</dd></div>
+      </dl>
+      <div className="mt-3 rounded-md bg-amber-50 p-3 text-xs leading-6 text-amber-900"><strong>尚未覆盖</strong><ul className="list-disc pl-4">{(thread.researchScope?.limitations.length ? thread.researchScope.limitations : ['完整财报、历史估值和独立风险核验尚未覆盖。']).map(item => <li key={item}>{item}</li>)}</ul><p>请核对标的和范围，再批准下方工具。标的存在与数据覆盖将在执行时验证；如需修改，请拒绝计划后新建研究。</p></div>
+    </section>}
     <section className="card plan-card">
-      <div className="card-heading"><h2>动态研究计划 <span>{steps.length} steps · {mode === 'api' ? `${thread.plannerMode ?? 'backend'} planner` : 'UI state machine'}</span></h2><div className="run-actions">
+      <div className="card-heading"><h2>研究执行计划 <span>{steps.length} steps · {mode === 'api' ? `${thread.plannerMode ?? 'backend'} planner` : 'UI state machine'}</span></h2><div className="run-actions">
         {mode === 'demo' && thread.status === 'running' && <Button variant="outline" size="sm" onClick={() => onAction('PAUSE')}><Pause />暂停</Button>}
         {mode === 'demo' && thread.status === 'paused' && <Button variant="outline" size="sm" onClick={() => onAction('RESUME')}><Play />恢复</Button>}
         {mode === 'api' && ['failed','partial'].includes(thread.status) && <Button variant="outline" size="sm" disabled={thread.loading} onClick={() => onAction('RESUME')}><RotateCcw />恢复</Button>}
