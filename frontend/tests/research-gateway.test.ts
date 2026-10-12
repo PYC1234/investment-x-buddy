@@ -68,3 +68,18 @@ test('审批页面渲染标的、范围、缺口与批准按钮', () => {
   assert.match(html, /不良贷款率尚未接入/);
   assert.match(html, /批准并执行/);
 });
+
+
+test('失败任务提供独立重试入口、错误原因和原始状态版本', () => {
+  const input = bundle();
+  input.run.status = 'PARTIAL';
+  input.run.approval = {plan_version: 1, allowed_tools: ['get_market_snapshot'], approved_at: '2026-10-11T00:00:00Z'};
+  input.run.tasks[0].status = 'FAILED';
+  input.run.tasks[0].error = 'Mock provider timeout';
+  const thread = applyBundle(initialThreads[0], input);
+  assert.equal(thread.remoteUpdatedAt, input.run.updated_at);
+  const html = renderToStaticMarkup(createElement(ResearchPlan, {thread, expanded: null, setExpanded: () => {}, onAction: () => {}, mode: 'api'}));
+  assert.match(html, /重试失败任务/);
+  assert.match(html, /Mock provider timeout/);
+  assert.match(html, /调用预算不重置/);
+});

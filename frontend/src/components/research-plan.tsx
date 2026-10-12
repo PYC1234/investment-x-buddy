@@ -5,12 +5,14 @@ import { steps as demoSteps } from '@/data/demo';
 import type { AppMode } from '@/lib/research-gateway';
 import type { ResearchThread } from '@/types/research';
 
-type Action = 'APPROVE'|'REJECT'|'PAUSE'|'RESUME'|'CANCEL'|'FAIL'|'RECOVER'|'TICK';
+type Action = 'APPROVE'|'REJECT'|'PAUSE'|'RESUME'|'CANCEL'|'FAIL'|'RECOVER'|'TICK'|'RETRY_FAILED';
 
 export function ResearchPlan({ thread, expanded, setExpanded, onAction, mode }: { thread: ResearchThread; expanded: number | null; setExpanded: (n: number | null) => void; onAction: (action: Action) => void; mode: AppMode }) {
   const steps = mode === 'api'
     ? (thread.tasks ?? []).map(task => ({ title: task.title, tool: task.toolName, detail: task.rationale, status: task.status, error: task.error, attempts: task.attempts }))
     : demoSteps.map((step, index) => ({ ...step, status: index < thread.step ? 'COMPLETED' : 'PENDING', error: null, attempts: 0 }));
+  const failedTasks = (thread.tasks ?? []).filter(task => task.status === 'FAILED');
+  const retryFailed = mode === 'api' && failedTasks.length > 0;
   const total = Math.max(steps.length, 1);
   return <div className="plan-stack">
     {mode === 'api' && steps.length > 0 && <section className="card p-5" aria-label="本次研究确认">
@@ -27,7 +29,7 @@ export function ResearchPlan({ thread, expanded, setExpanded, onAction, mode }: 
       <div className="card-heading"><h2>研究执行计划 <span>{steps.length} steps · {mode === 'api' ? `${thread.plannerMode ?? 'backend'} planner` : 'UI state machine'}</span></h2><div className="run-actions">
         {mode === 'demo' && thread.status === 'running' && <Button variant="outline" size="sm" onClick={() => onAction('PAUSE')}><Pause />暂停</Button>}
         {mode === 'demo' && thread.status === 'paused' && <Button variant="outline" size="sm" onClick={() => onAction('RESUME')}><Play />恢复</Button>}
-        {mode === 'api' && ['failed','partial'].includes(thread.status) && <Button variant="outline" size="sm" disabled={thread.loading} onClick={() => onAction('RESUME')}><RotateCcw />恢复</Button>}
+        {mode === 'api' && ['failed','partial'].includes(thread.status) && <Button variant="outline" size="sm" disabled={thread.loading || thread.approval !== 'approved'} onClick={() => onAction(retryFailed ? 'RETRY_FAILED' : 'RESUME')}><RotateCcw />{retryFailed ? '重试失败任务' : '恢复'}</Button>}
         {['running','paused','approval','failed','partial'].includes(thread.status) && <Button variant="destructive" size="sm" disabled={thread.loading} onClick={() => onAction('CANCEL')}><Square />停止</Button>}
       </div></div>
       <div className="progress-track"><span style={{ width: `${Math.max(4, thread.step / total * 100)}%` }} /></div>
@@ -39,6 +41,6 @@ export function ResearchPlan({ thread, expanded, setExpanded, onAction, mode }: 
       {mode === 'demo' && thread.status === 'running' && <div className="plan-footer"><Button onClick={() => onAction('TICK')}>推进下一演示步骤 <Play /></Button><Button variant="outline" onClick={() => onAction('FAIL')}>模拟工具失败</Button></div>}
     </section>
     {thread.status === 'approval' && <section className="approval-card"><div className="approval-icon"><LockKeyhole /></div><div><span className="eyebrow">HUMAN APPROVAL REQUIRED</span><h3>{mode === 'api' ? `批准 Plan v${thread.planVersion} 的工具范围？` : '允许扩展行业对比样本？'}</h3><p>{mode === 'api' ? '批准后后端才会执行上方注册工具。批准请求绑定当前计划版本和完整工具白名单。' : '演示请求将增加一次本地工具步骤，不连接金融 API。'}</p><div className="permission-line"><ShieldCheck /> {mode === 'api' ? [...new Set((thread.tasks ?? []).map(task => task.toolName))].join(' · ') : 'peer_comparison · read:demo-peers'}</div></div><div className="approval-actions"><Button disabled={thread.loading} onClick={() => onAction('APPROVE')}>{thread.loading ? '执行中…' : mode === 'api' ? '批准并执行' : '批准演示步骤'}</Button><Button variant="outline" disabled={thread.loading} onClick={() => onAction('REJECT')}>拒绝计划</Button></div></section>}
-    {['failed','partial'].includes(thread.status) && <section className="failure-card"><div><strong>{thread.status === 'partial' ? '研究部分完成' : '执行已停止'}</strong><p>{mode === 'api' ? '请在 Trace 和报告中查看工具错误与缺失信息。已完成 Evidence 不会在恢复时重复执行。' : '模拟工具超时。最近检查点仍可用于恢复。'}</p></div><Button disabled={thread.loading} onClick={() => onAction(mode === 'api' ? 'RESUME' : 'RECOVER')}><RotateCcw />从检查点恢复</Button></section>}
+    {['failed','partial'].includes(thread.status) && <section className="failure-card"><div><strong>{thread.status === 'partial' ? '研究部分完成' : '执行已停止'}</strong><p>{mode === 'api' ? retryFailed ? `有 ${failedTasks.length} 项失败。每次只重试失败项一次，沿用原审批与参数，保留成功证据；调用预算不重置。` : '请在 Trace 和报告中查看停止原因。恢复仅继续未完成任务；规划失败请新建研究。' : '模拟工具超时。最近检查点仍可用于恢复。'}</p>{retryFailed && <ul className="mt-2 space-y-1 text-xs">{failedTasks.map(task => <li key={task.id}>{task.title}：{task.error ?? '执行失败'} · 累计 {task.attempts} 次尝试</li>)}</ul>}</div><Button disabled={thread.loading || (mode === 'api' && thread.approval !== 'approved')} onClick={() => onAction(mode === 'api' ? retryFailed ? 'RETRY_FAILED' : 'RESUME' : 'RECOVER')}><RotateCcw />{retryFailed ? '重试失败任务' : '从检查点恢复'}</Button></section>}
   </div>;
 }

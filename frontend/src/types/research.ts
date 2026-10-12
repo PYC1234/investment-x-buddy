@@ -11,7 +11,7 @@ export interface ResearchReportData { title: string; status: string; dataNotice:
 export interface ToolCall { id: string; toolName: string; attempt: number; status: string; durationMs: number; error: string | null }
 export interface ToolDefinition { name: string; description: string; permission: string; parameters?: Record<string, unknown> }
 export interface ResearchThread {
-  id: string; remoteRunId?: string; remoteThreadId?: string; title: string; company: string; code: string; sector: string; goal: string;
+  id: string; remoteRunId?: string; remoteThreadId?: string; remoteUpdatedAt?: string; title: string; company: string; code: string; sector: string; goal: string;
   status: RunStatus; step: number; approval: 'pending' | 'approved' | 'rejected';
   tab: WorkspaceTab; events: TraceEvent[]; calls: number; tokens: number; latency: number;
   updated: string; checkpoint: Checkpoint | null; recovered: boolean;
@@ -23,4 +23,4 @@ export interface ResearchThread {
 }
 export interface Dataset { isDemo?: boolean; metrics: { label: string; value: string; unit: string; note: string }[]; prices: { date: string; price: number }[]; financials: { year: string; revenue: number; profit: number }[]; findings: string[] }
 export interface Preferences { horizon: string; risk: string; evidence: boolean }
-export type RunAction = { type: 'START'; goal: string } | { type: 'TICK' | 'PAUSE' | 'RESUME' | 'CANCEL' | 'APPROVE' | 'REJECT' | 'FAIL' | 'RECOVER'; time: string };
+export type RunAction = { type: 'START'; goal: string } | { type: 'TICK' | 'PAUSE' | 'RESUME' | 'CANCEL' | 'APPROVE' | 'REJECT' | 'FAIL' | 'RECOVER' | 'RETRY_FAILED'; time: string };

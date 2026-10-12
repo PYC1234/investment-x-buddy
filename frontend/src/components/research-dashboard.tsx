@@ -92,16 +92,19 @@ export function ResearchDashboard() {
       updateById(active.id, thread => transition(thread, { type, time: now() } as RunAction));
       return;
     }
+    if (active.loading) return;
     if (!active.remoteRunId) { setApiError('当前线程还没有真实 run_id。'); return; }
-    if (!['APPROVE', 'REJECT', 'RESUME', 'CANCEL'].includes(type)) return;
+    if (!['APPROVE', 'REJECT', 'RESUME', 'CANCEL', 'RETRY_FAILED'].includes(type)) return;
     setApiError(null);
-    updateById(active.id, thread => ({ ...thread, loading: true, status: type === 'APPROVE' || type === 'RESUME' ? 'running' : thread.status }));
+    updateById(active.id, thread => ({ ...thread, loading: true, status: type === 'APPROVE' || type === 'RESUME' || type === 'RETRY_FAILED' ? 'running' : thread.status }));
     const controller = new AbortController();
     const allowedTools = [...new Set((active.tasks ?? []).map(task => task.toolName))];
     const result = type === 'APPROVE'
       ? await researchApi.approve(active.remoteRunId, active.planVersion ?? 0, allowedTools, controller.signal)
       : type === 'REJECT'
         ? await researchApi.reject(active.remoteRunId, active.planVersion ?? 0, 'Rejected by the user in the web workspace.', controller.signal)
+        : type === 'RETRY_FAILED'
+          ? await researchApi.retryFailed(active.remoteRunId, active.planVersion ?? 0, active.remoteUpdatedAt ?? '', controller.signal)
         : type === 'RESUME'
           ? await researchApi.resume(active.remoteRunId, controller.signal)
           : await researchApi.cancel(active.remoteRunId, controller.signal);

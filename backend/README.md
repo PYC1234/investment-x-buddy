@@ -242,3 +242,15 @@ Render Environment 配置 `FUYAO_API_KEY`，部署本版本并重启后，工具
 FixturePlanner 使用确定性关键词规则：单一盈利目标只查询利润表；单一估值目标查询估值和利润表；风险目标或多个目标查询行情、利润表、估值。无明确分类时为综合研究；不新增付费模型调用。
 Plan 新增兼容字段 `research_type`（profitability/valuation/risk/comprehensive）、`scope`、`limitations`，前端 Plan 页在审批前显示研究确认卡。未支持的风险数据明确列为缺口，不创建假工具任务。报告摘要列出本次实际计划范围。
 固定验收集见 `tests/test_research_scope.py`、`tests/test_symbols.py`、`tests/test_bank_report.py` 及前端 `tests/research-gateway.test.ts`。此分类器不等同于自由语义规划；名称主数据覆盖及银行专属指标仍有限。
+
+
+## 失败任务一键重试
+`POST /api/v1/runs/{id}/retry-failed`，请求体：
+```json
+{"plan_version":1,"expected_updated_at":"GET Run 返回的完整 updated_at 字符串"}
+```
+仅对 PARTIAL/FAILED Run 内 FAILED 任务执行；必须有匹配原审批，任务工具、参数和版本须与原计划完全一致。不允许传入新参数。每次手动重试每个失败项最多一次，跳过成功和其他未完成任务；累计 attempts 和工具调用预算不重置。部分预算不足时，未尝试的失败项仍保留失败原因。
+成功返回 200 和更新后的完整 Run/报告；再次失败保持 PARTIAL。409 错误包括 retry_not_allowed、retry_state_changed、approval_required、no_failed_tasks、retry_budget_exhausted、retry_scope_changed、retry_invalid_task。旧状态请求和重复点击不能重复执行同一状态的重试。
+旧报告保存在 `report.archived` 事件中，重试记录为 `run.retry_requested` / `run.retry_completed`，每次工具尝试有独立耗时、错误、结果；检查点继续持久化。工具次数为整个 Run 的累计限制，轮数和执行超时仍按每次执行批次生效；并非硬实时截止。
+前端 Plan 页列出失败任务与错误，并提供“重试失败任务”。纯规划失败没有工具审批时不可用，应新建研究；中断但未失败的任务继续使用 resume。尚无分布式任务锁或后台队列。
+验收：`.venv/Scripts/python.exe -m pytest tests/test_retry_failed.py -q`，测试注入首次失败后成功、持续失败、预算耗尽、重复请求、参数变更和同库重启恢复，不调用收费模型或真实金融服务。

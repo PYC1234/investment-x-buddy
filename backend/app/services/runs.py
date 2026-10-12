@@ -9,7 +9,7 @@ import httpx
 
 from app.core.config import Settings, get_settings
 from app.core.errors import AppError
-from app.schemas.research import ApprovalRequest, CreateRunRequest, RejectRequest
+from app.schemas.research import ApprovalRequest, CreateRunRequest, RejectRequest, RetryFailedRequest
 from app.services.planner import DeepSeekPlanner, FixturePlanner, Planner
 from app.services.store import SQLiteStore
 from app.services.symbols import SymbolResolutionError
@@ -141,7 +141,7 @@ class RunService:
         self._save_checkpoint(run_id, "REJECTED")
         return self.get_run(run_id)
 
-    async def execute(self, run_id: str) -> dict[str, Any]:
+    async def execute(self, run_id: str, retry_task_ids: set[str] | None = None) -> dict[str, Any]:
         run = self._run_or_404(run_id)
         approval = run.get("approval")
         if not approval or approval.get("plan_version") != run["plan_version"]:
@@ -156,7 +156,9 @@ class RunService:
         stop_reason: str | None = None
         tasks = self.store.fetch_all("SELECT * FROM tasks WHERE run_id=? ORDER BY position", (run_id,))
         for task in tasks:
-            if task["status"] == "COMPLETED" or task["status"] == "FAILED":
+            if retry_task_ids is not None and task["id"] not in retry_task_ids:
+                continue
+            if task["status"] == "COMPLETED" or (task["status"] == "FAILED" and retry_task_ids is None):
                 continue
             latest = self._run_or_404(run_id)
             if latest["status"] == "CANCELLED":
@@ -180,7 +182,7 @@ class RunService:
                 self._fail_task(task, str(exc))
                 continue
             rounds += 1
-            max_attempts = self.settings.max_tool_retries + 1
+            max_attempts = task["attempts"] + 1 if retry_task_ids is not None else self.settings.max_tool_retries + 1
             while task["attempts"] < max_attempts and calls < self.settings.max_tool_calls:
                 attempt = task["attempts"] + 1
                 task["attempts"] = attempt
@@ -314,6 +316,44 @@ class RunService:
         sequence = int(existing["sequence"]) + 1
         self.store.execute("INSERT INTO checkpoints(id,run_id,sequence,state_json,context_summary,before_chars,after_chars,created_at) VALUES(?,?,?,?,?,?,?,?)", (str(uuid4()), run_id, sequence, json.dumps(summary_data), summary, len(full_context), len(summary), now_iso()))
         self._event(run_id, "checkpoint.saved", {"sequence": sequence, "before_chars": len(full_context), "after_chars": len(summary)})
+
+    async def retry_failed(self, run_id: str, request: RetryFailedRequest) -> dict[str, Any]:
+        run = self._run_or_404(run_id)
+        if run["status"] not in {"PARTIAL", "FAILED"}:
+            raise AppError(status_code=409, code="retry_not_allowed", message="仅部分完成或执行失败的研究可重试失败任务。")
+        if run["updated_at"] != request.expected_updated_at or run["plan_version"] != request.plan_version:
+            raise AppError(status_code=409, code="retry_state_changed", message="研究状态或计划已更新，请刷新后再操作。")
+        approval = run.get("approval")
+        if not approval or approval.get("plan_version") != run["plan_version"]:
+            raise AppError(status_code=409, code="approval_required", message="缺少有效原审批；规划失败请新建研究，不能直接执行工具。")
+        failed = self.store.fetch_all("SELECT * FROM tasks WHERE run_id=? AND status='FAILED' ORDER BY position", (run_id,))
+        if not failed:
+            raise AppError(status_code=409, code="no_failed_tasks", message="没有可重试的失败任务；未完成步骤请使用恢复。")
+        if len(self.get_tool_calls(run_id)) >= self.settings.max_tool_calls:
+            raise AppError(status_code=409, code="retry_budget_exhausted", message="本次研究的工具调用预算已耗尽；不会重置预算或重复查询。")
+        original_tasks = (run.get("plan") or {}).get("tasks", [])
+        for task in failed:
+            position = task["position"] - 1
+            original = original_tasks[position] if 0 <= position < len(original_tasks) else {}
+            if (task["plan_version"] != run["plan_version"] or task["tool_name"] not in approval["allowed_tools"]
+                    or original.get("tool_name") != task["tool_name"] or original.get("arguments") != task["arguments"]):
+                raise AppError(status_code=409, code="retry_scope_changed", message="任务已超出原计划或审批范围，禁止重试。")
+            try:
+                self.registry.validate(task["tool_name"], task["arguments"])
+            except ValueError:
+                raise AppError(status_code=409, code="retry_invalid_task", message="失败任务工具或参数无效，禁止重试。") from None
+        timestamp = now_iso()
+        with self.store.connection() as connection:
+            claimed = connection.execute("UPDATE runs SET status='APPROVED',error=NULL,completed_at=NULL,updated_at=? WHERE id=? AND status=? AND updated_at=?", (timestamp, run_id, run["status"], request.expected_updated_at))
+            if claimed.rowcount != 1:
+                raise AppError(status_code=409, code="retry_state_changed", message="研究正在被其他请求更新，请刷新后再操作。")
+            connection.execute("INSERT INTO events(run_id,event_type,data_json,created_at) VALUES(?,?,?,?)", (run_id, "run.retry_requested", json.dumps({"task_ids": [task["id"] for task in failed], "plan_version": run["plan_version"], "attempts_per_task": 1}, ensure_ascii=False), timestamp))
+            if run.get("report"):
+                connection.execute("INSERT INTO events(run_id,event_type,data_json,created_at) VALUES(?,?,?,?)", (run_id, "report.archived", json.dumps({"reason": "retry_failed", "report": run["report"]}, ensure_ascii=False), timestamp))
+        self._save_checkpoint(run_id, "APPROVED")
+        result = await self.execute(run_id, retry_task_ids={task["id"] for task in failed})
+        self._event(run_id, "run.retry_completed", {"status": result["status"], "task_ids": [task["id"] for task in failed]})
+        return result
 
     async def resume(self, run_id: str) -> dict[str, Any]:
         run = self._run_or_404(run_id)

@@ -2,7 +2,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends
 
-from app.schemas.research import ApprovalRequest, CreateRunRequest, RejectRequest
+from app.schemas.research import ApprovalRequest, CreateRunRequest, RejectRequest, RetryFailedRequest
 from app.services.runs import RunService, get_run_service
 
 
@@ -32,6 +32,11 @@ async def reject_run(run_id: str, request: RejectRequest, service: RunService = 
 @router.post("/runs/{run_id}/resume")
 async def resume_run(run_id: str, service: RunService = Depends(get_run_service)) -> dict[str, Any]:
     return await service.resume(run_id)
+
+
+@router.post("/runs/{run_id}/retry-failed")
+async def retry_failed_run(run_id: str, request: RetryFailedRequest, service: RunService = Depends(get_run_service)) -> dict[str, Any]:
+    return await service.retry_failed(run_id, request)
 
 
 @router.post("/runs/{run_id}/cancel")

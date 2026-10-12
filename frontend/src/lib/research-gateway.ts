@@ -118,7 +118,7 @@ export function applyBundle(thread: ResearchThread, bundle: RunBundle): Research
   const companyNames: Record<string, string> = { '600519.SH': '贵州茅台', '300750.SZ': '宁德时代', '000001.SZ': '平安银行', '000858.SZ': '五粮液', '600036.SH': '招商银行', '601318.SH': '中国平安' };
   const totalLatency = calls.reduce((sum, call) => sum + call.durationMs, 0) / 1000;
   return {
-    ...thread, remoteRunId: run.id, remoteThreadId: run.thread_id, goal: run.goal, title: run.goal.slice(0, 60),
+    ...thread, remoteRunId: run.id, remoteThreadId: run.thread_id, remoteUpdatedAt: run.updated_at, goal: run.goal, title: run.goal.slice(0, 60),
     company: companyNames[code] ?? (code || '尚未指定证券'), code, sector: code === '600519.SH' || code === '000858.SZ' ? '食品饮料' : code === '300750.SZ' ? '电池' : ['000001.SZ', '600036.SH', '601318.SH'].includes(code) ? '金融' : '',
     status: uiStatus(run.status), apiStatus: run.status, approval: run.status === 'REJECTED' ? 'rejected' : run.approval ? 'approved' : 'pending',
     step: tasks.filter(task => task.status === 'COMPLETED').length, planVersion: run.plan_version, plannerMode: run.planner_mode,
@@ -141,6 +141,7 @@ export const researchApi = {
   approve: (id: string, planVersion: number, allowedTools: string[], signal?: AbortSignal) => request<ApiRun>(`/api/v1/runs/${id}/approve`, { method: 'POST', body: JSON.stringify({ plan_version: planVersion, allowed_tools: allowedTools }), signal }),
   reject: (id: string, planVersion: number, reason: string, signal?: AbortSignal) => request<ApiRun>(`/api/v1/runs/${id}/reject`, { method: 'POST', body: JSON.stringify({ plan_version: planVersion, reason }), signal }),
   resume: (id: string, signal?: AbortSignal) => request<ApiRun>(`/api/v1/runs/${id}/resume`, { method: 'POST', signal }),
+  retryFailed: (id: string, planVersion: number, updatedAt: string, signal?: AbortSignal) => request<ApiRun>(`/api/v1/runs/${id}/retry-failed`, { method: 'POST', body: JSON.stringify({ plan_version: planVersion, expected_updated_at: updatedAt }), signal }),
   cancel: (id: string, signal?: AbortSignal) => request<ApiRun>(`/api/v1/runs/${id}/cancel`, { method: 'POST', signal }),
   threads: (signal?: AbortSignal) => request<ApiThread[]>('/api/v1/threads', { signal }),
 };

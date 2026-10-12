@@ -52,3 +52,9 @@ class RejectRequest(BaseModel):
     plan_version: int = Field(ge=1)
     reason: str = Field(min_length=1, max_length=500)
 
+
+
+class RetryFailedRequest(BaseModel):
+    model_config = {"extra": "forbid"}
+    plan_version: int = Field(ge=1)
+    expected_updated_at: str = Field(min_length=1, max_length=100)
