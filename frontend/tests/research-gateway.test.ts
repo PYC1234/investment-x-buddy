@@ -1,10 +1,32 @@
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { ResearchPlan } from '../src/components/research-plan';
+import { ResearchReport } from '../src/components/research-report';
+import { buildExampleGoal } from '../src/components/research-input';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { applyBundle, type RunBundle } from '../src/lib/research-gateway';
 import { initialThreads } from '../src/data/demo';
+
+test('质量失败证据保留供复核但不进入图表或指标，报告显示质量状态', () => {
+  const data = bundle();
+  for (const item of data.evidence) item.data.quality = { status: 'FAIL', usable: false, issues: [{ message: '来源时间异常' }] };
+  data.report = { title: '质量检查报告', status: 'PARTIAL', quality_status: 'FAIL', data_notice: '接口数据，质量提示为准', executive_summary: '异常证据已排除', findings: [], missing_information: ['来源时间异常'], evidence_ids: ['ev1'] };
+  const mapped = applyBundle(initialThreads[0], data);
+  assert.equal(mapped.apiEvidence?.length, 3);
+  assert.equal(mapped.apiDataset?.prices.length, 0);
+  assert.equal(mapped.apiDataset?.financials.length, 0);
+  assert.equal(mapped.apiDataset?.metrics[0].value, '—');
+  assert.match(mapped.apiEvidence![0].limitation, /来源时间异常/);
+  const html = renderToStaticMarkup(createElement(ResearchReport, { thread: mapped, data: mapped.apiDataset ?? null, mode: 'api', onEvidence: () => {} }));
+  assert.match(html, /未通过，异常证据已排除/);
+});
+
+test('示例目标必须包含当前证券代码或明确的预置公司', () => {
+  assert.match(buildExampleGoal({ company: '研究工作台', code: '' }, '估值与风险'), /贵州茅台（600519.SH）/);
+  assert.match(buildExampleGoal({ company: '招商银行', code: '600036.SH' }, '盈利能力分析'), /招商银行（600036.SH）/);
+  assert.match(buildExampleGoal({ company: '尚未指定证券', code: '002594.SZ' }, '估值与风险'), /请对002594.SZ/);
+});
 
 function bundle(isDemo = false): RunBundle {
   return {

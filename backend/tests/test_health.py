@@ -12,7 +12,7 @@ async def test_health_endpoint(client: AsyncClient) -> None:
     body = response.json()
     assert body["service"] == "investment-x-buddy-api"
     assert body["status"] == "ok"
-    assert body["version"] == "0.1.0"
+    assert body["version"] == "0.1.1"
     assert datetime.fromisoformat(body["timestamp"]).tzinfo is not None
 
 

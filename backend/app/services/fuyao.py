@@ -24,7 +24,12 @@ def build_fuyao_registry(secret):
             raise ToolExecutionError(f"Fuyao request failed: {type(exc).__name__}") from None
 
     def base(symbol, path, data):
-        return {"symbol": symbol, "available": True, "is_demo": False, "data_label": "FUYAO / MARKET DATA", "source": "https://fuyao.aicubes.cn" + path, "timestamp_ms": data.get("timestamp"), "retrieved_at": datetime.now(timezone.utc).isoformat(), "currency": "CNY"}
+        returned = sorted({str(row["thscode"]).upper() for row in data["item"] if row.get("thscode")})
+        currencies = sorted({str(row["currency"]).upper() for row in data["item"] if row.get("currency")})
+        return {"symbol": symbol, "returned_symbols": returned, "returned_currencies": currencies, "available": True, "is_demo": False, "data_label": "FUYAO / MARKET DATA", "source": "https://fuyao.aicubes.cn" + path, "timestamp_ms": data.get("timestamp"), "retrieved_at": datetime.now(timezone.utc).isoformat(), "currency": "CNY"}
+
+    def field(path, unit, basis):
+        return {"raw_field": path, "unit": unit, "basis": basis}
 
     def market(args):
         path = "/api/a-share/prices/snapshot"
@@ -32,7 +37,11 @@ def build_fuyao_registry(secret):
         row = data["item"][0]
         end = datetime.now(timezone.utc)
         history = get("/api/a-share/prices/historical", {"thscode": args.symbol, "interval": "1d", "start": int((end-timedelta(days=365)).timestamp()*1000), "end": int(end.timestamp()*1000), "adjust": "forward"})
-        return {**base(args.symbol, path, data), "snapshot": {"price_cny": row.get("last_price"), "change_percent": row.get("price_change_ratio_pct"), "as_of": data.get("timestamp")}, "prices": [{"date": datetime.fromtimestamp(r["date_ms"]/1000, timezone(timedelta(hours=8))).strftime("%Y-%m-%d"), "price": r["close_price"]} for r in sorted(history["item"], key=lambda x:x["date_ms"]) if r.get("close_price") is not None], "adjust": "forward", "history_source": "https://fuyao.aicubes.cn/api/a-share/prices/historical"}
+        history_symbols = {str(r["thscode"]).upper() for r in history["item"] if r.get("thscode")}
+        result = {**base(args.symbol, path, data), "snapshot": {"price_cny": row.get("last_price"), "change_percent": row.get("price_change_ratio_pct"), "as_of": data.get("timestamp")}, "prices": [{"date": datetime.fromtimestamp(r["date_ms"]/1000, timezone(timedelta(hours=8))).strftime("%Y-%m-%d"), "price": r["close_price"]} for r in sorted(history["item"], key=lambda x:x["date_ms"]) if r.get("close_price") is not None], "adjust": "forward", "history_source": "https://fuyao.aicubes.cn/api/a-share/prices/historical", "raw_items": data["item"], "history_raw_items": history["item"], "field_provenance": {"snapshot.price_cny": field("item[0].last_price", "CNY", "last_price; 最近可用行情"), "prices.price": field("item[].close_price", "CNY", "forward; 前复权日线")}}
+        result["returned_symbols"] = sorted(set(result["returned_symbols"]) | history_symbols)
+        result["returned_currencies"] = sorted(set(result["returned_currencies"]) | {str(r["currency"]).upper() for r in history["item"] if r.get("currency")})
+        return result
 
     def financial(args):
         path = "/api/a-share/financials/income-statements"
@@ -41,15 +50,22 @@ def build_fuyao_registry(secret):
         latest = rows[-1]
         revenue = latest.get("operating_income")
         profit = latest.get("net_profit")
-        return {**base(args.symbol, path, data), "fiscal_year": latest.get("fiscal_year"), "period_policy": "latest available annual reports; requested fiscal_year is not a guarantee", "financials": {"roe_percent": None, "net_margin_percent": profit/revenue*100 if profit is not None and revenue else None, "revenue_growth_percent": None}, "financial_history": [{"year": str(r["fiscal_year"]), "revenue": r["operating_income"]/1e8, "profit": r["parent_holder_net_profit"]/1e8} for r in rows if r.get("operating_income") is not None and r.get("parent_holder_net_profit") is not None], "raw_items": rows, "missing_information": "利润表不提供 ROE；未取得资产负债表与现金流量表。财务趋势单位为亿元，利润为归母净利润。"}
+        return {**base(args.symbol, path, data), "fiscal_year": latest.get("fiscal_year"), "period_policy": "latest available annual reports; requested fiscal_year is not a guarantee", "financials": {"roe_percent": None, "net_margin_percent": profit/revenue*100 if profit is not None and revenue else None, "revenue_growth_percent": None}, "financial_history": [{"year": str(r["fiscal_year"]), "revenue": r["operating_income"]/1e8, "profit": r["parent_holder_net_profit"]/1e8} for r in rows if r.get("operating_income") is not None and r.get("parent_holder_net_profit") is not None], "raw_items": rows, "field_provenance": {"financial_history.revenue": field("item[].operating_income", "亿元", "annual operating_income / 100000000"), "financial_history.profit": field("item[].parent_holder_net_profit", "亿元", "annual parent_holder_net_profit / 100000000")}, "missing_information": "利润表不提供 ROE；未取得资产负债表与现金流量表。财务趋势单位为亿元，利润为归母净利润。"}
 
     def valuation(args):
         path = "/api/a-share/valuations/snapshot"
         data = get(path, {"thscodes": args.symbol})
         row = data["item"][0]
-        return {**base(args.symbol, path, data), "valuation": {"pe_ttm": row.get("pe_ttm"), "pb": row.get("pb_mrq"), "dividend_yield_percent": None}, "raw_items": data["item"], "missing_information": "PB 为 MRQ 口径；本接口不提供股息率或历史估值区间。"}
+        return {**base(args.symbol, path, data), "valuation": {"pe_ttm": row.get("pe_ttm"), "pb": row.get("pb_mrq"), "dividend_yield_percent": None}, "raw_items": data["item"], "field_provenance": {"valuation.pe_ttm": field("item[0].pe_ttm", "倍", "TTM"), "valuation.pb": field("item[0].pb_mrq", "倍", "MRQ")}, "missing_information": "PB 为 MRQ 口径；本接口不提供股息率或历史估值区间。"}
 
     registry = ToolRegistry()
+    def checked_handler(handler):
+        def execute(args):
+            try:
+                return handler(args)
+            except (ValueError, TypeError, KeyError, OverflowError, OSError):
+                raise ToolExecutionError("Fuyao response schema invalid; no fixture fallback.") from None
+        return execute
     for name, model, handler in [("get_market_snapshot", StockArgs, market), ("get_financial_summary", FinancialArgs, financial), ("get_valuation_snapshot", StockArgs, valuation)]:
-        registry.register(RegisteredTool(name, "Read Fuyao market data; no demo fallback.", model, handler, "FUYAO / MARKET DATA"))
+        registry.register(RegisteredTool(name, "Read Fuyao market data; no demo fallback.", model, checked_handler(handler), "FUYAO / MARKET DATA"))
     return registry

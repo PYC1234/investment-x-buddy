@@ -212,7 +212,7 @@ execution needs a managed database and job queue.
 
 ## Not implemented
 
-- Live financial data providers
+- Additional financial providers beyond the implemented Fuyao tools
 - Authentication, tenant isolation, or user accounts
 - Distributed worker queue and cross-process cancellation guarantees
 - Live SSE streaming for persisted run events
@@ -222,7 +222,7 @@ execution needs a managed database and job queue.
 
 
 ## 扶摇真实数据模式
-Render Environment 配置 `FUYAO_API_KEY`，部署本版本并重启后，工具自动使用扶摇真实只读接口。`PLANNER_MODE=fixture` 可继续保留：仅计划使用固定模板，金融证据使用真实接口，不调用收费 DeepSeek。
+Render Environment 配置 `FUYAO_API_KEY`，部署本版本并重启后，工具自动使用扶摇真实只读接口。`PLANNER_MODE=fixture` 可继续保留：仅计划使用目标分类规则，金融证据使用真实接口，不调用收费 DeepSeek。
 三个工具分别读取行情快照（附一年日线）、最近五个年度利润表和估值快照。每次完整审批执行通常产生四个 HTTP 请求；失败不切回演示数据。可设置 `MAX_TOOL_RETRIES=0` 禁止失败后重复工具请求。
 前端 `NEXT_PUBLIC_API_BASE_URL=https://investment-x-buddy.onrender.com`，修改后重新构建。旧 Run 的证据不会被替换，请创建并审批新研究。图表来自日线和年度利润表；ROE 未提供时显示空值。非交易时段显示最近可用行情，不能保证逐笔实时。
 报告使用可追溯证据生成规则分析，不调用报告 LLM；SQLite 云端持久化仍需持久磁盘。
@@ -254,3 +254,14 @@ Plan 新增兼容字段 `research_type`（profitability/valuation/risk/comprehen
 旧报告保存在 `report.archived` 事件中，重试记录为 `run.retry_requested` / `run.retry_completed`，每次工具尝试有独立耗时、错误、结果；检查点继续持久化。工具次数为整个 Run 的累计限制，轮数和执行超时仍按每次执行批次生效；并非硬实时截止。
 前端 Plan 页列出失败任务与错误，并提供“重试失败任务”。纯规划失败没有工具审批时不可用，应新建研究；中断但未失败的任务继续使用 resume。尚无分布式任务锁或后台队列。
 验收：`.venv/Scripts/python.exe -m pytest tests/test_retry_failed.py -q`，测试注入首次失败后成功、持续失败、预算耗尽、重复请求、参数变更和同库重启恢复，不调用收费模型或真实金融服务。
+
+## 证据质量检查（2026-10-12）
+新 Run 的真实 Evidence 在执行后保存 `data.quality`：
+```json
+{"version":1,"checked_at":"ISO 8601","status":"WARN","usable":true,"issues":[{"code":"TIME_STALE","field":"timestamp_ms","severity":"WARN","message":"来源超过提醒阈值"}],"policy":"接口级规则检查"}
+```
+检查证券一致性、已提供的供应商证券/币种、来源时间、关键指标、历史序列、年度连续性以及字段单位/口径契约。行情/估值超过 7 个自然日仅提示陈旧，不假设节假日或停牌规则；年度数据超过两年提醒陈旧。超过当前时间 5 分钟、币种冲突、非法数值、全量关键数据缺失、未来财务期间等严重问题标为 FAIL/usable=false。
+FAIL 不触发自动重查，原始数据保留供复核；成功取数的 Task 仍是 COMPLETED，但 Run 为 PARTIAL，异常证据不进入正常报告结论及前端指标/图表。修正问题后新建研究，不用失败任务重试绕过质量规则。
+报告新增兼容字段 `quality_status` 与 `quality_checks`，限制区展示带 Evidence ID 的问题；事件 `evidence.quality_checked` 记录结果。前端旧报告显示未检查，不伪造历史验收。
+扶摇 Evidence 保存 `field_provenance`（raw_field/unit/basis）、原始快照与日线。字段映射来自适配契约，不能代替供应商内容真实性、交易所交叉核验或商业展示许可核实。未知供应商证券字段明确提示待核验，不默认通过独立证券验证。
+测试：`.venv/Scripts/python.exe -m pytest tests/test_evidence_quality.py -q`。使用 Mock，不调用真实模型或金融数据。历史报告不自动重写，请新建研究查看质量检查。

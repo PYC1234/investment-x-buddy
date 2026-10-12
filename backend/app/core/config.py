@@ -22,7 +22,7 @@ class Settings(BaseSettings):
     )
 
     service_name: str = "investment-x-buddy-api"
-    version: str = "0.1.0"
+    version: str = "0.1.1"
     api_v1_prefix: str = "/api/v1"
     demo_mode: bool = True
     cors_origins: list[str] = Field(

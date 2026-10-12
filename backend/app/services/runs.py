@@ -12,6 +12,7 @@ from app.core.errors import AppError
 from app.schemas.research import ApprovalRequest, CreateRunRequest, RejectRequest, RetryFailedRequest
 from app.services.planner import DeepSeekPlanner, FixturePlanner, Planner
 from app.services.store import SQLiteStore
+from app.services.evidence_quality import assess_evidence
 from app.services.symbols import SymbolResolutionError
 from app.services.tools import ToolExecutionError, ToolRegistry, build_tool_registry
 
@@ -191,12 +192,16 @@ class RunService:
                 call_started = time.perf_counter()
                 try:
                     result, _ = self.registry.execute(task["tool_name"], validated)
+                    if result.get("is_demo") is False:
+                        result["quality"] = assess_evidence(task["tool_name"], result, task["arguments"]["symbol"])
                     duration = (time.perf_counter() - call_started) * 1000
                     evidence_id = f"EVD-{uuid4().hex[:12].upper()}"
                     self.store.execute("INSERT INTO evidence(id,run_id,task_id,tool_name,title,data_json,is_demo,created_at) VALUES(?,?,?,?,?,?,?,?)", (evidence_id, run_id, task["id"], task["tool_name"], task["title"], json.dumps(result, ensure_ascii=False), int(result.get("is_demo", True)), now_iso()))
                     self._record_tool_call(run_id, task, attempt, "SUCCESS", duration, result, None)
                     self.store.execute("UPDATE tasks SET status='COMPLETED',evidence_id=?,error=NULL,updated_at=? WHERE id=?", (evidence_id, now_iso(), task["id"]))
                     self._event(run_id, "tool.completed", {"task_id": task["id"], "tool_name": task["tool_name"], "evidence_id": evidence_id, "duration_ms": round(duration, 3)})
+                    if result.get("quality"):
+                        self._event(run_id, "evidence.quality_checked", {"evidence_id": evidence_id, **result["quality"]})
                     break
                 except ToolExecutionError as exc:
                     duration = (time.perf_counter() - call_started) * 1000
@@ -208,7 +213,8 @@ class RunService:
 
         current_tasks = self.store.fetch_all("SELECT * FROM tasks WHERE run_id=? ORDER BY position", (run_id,))
         failed = [task for task in current_tasks if task["status"] != "COMPLETED"]
-        final_status = "PARTIAL" if failed or stop_reason else "COMPLETE"
+        quality_failed = any(item["data"].get("quality", {}).get("usable") is False for item in self.get_evidence(run_id))
+        final_status = "PARTIAL" if failed or stop_reason or quality_failed else "COMPLETE"
         report = self._build_report(run_id, final_status, stop_reason)
         self.store.execute("UPDATE runs SET status=?,report_json=?,error=?,updated_at=?,completed_at=? WHERE id=?", (final_status, json.dumps(report, ensure_ascii=False), stop_reason, now_iso(), now_iso(), run_id))
         self._event(run_id, "run.completed", {"status": final_status, "stop_reason": stop_reason})
@@ -238,11 +244,17 @@ class RunService:
                 return "未提供" if value is None else f"{value:,.2f}"
             for item in evidence:
                 data = item["data"]
+                quality = data.get("quality") or {}
+                for issue in quality.get("issues", []):
+                    missing.append(f"[{item['id']}] {issue['message']}")
+                if quality.get("usable") is False:
+                    findings.append({"task": item["title"], "statement": "此证据未通过质量检查，已排除出指标、图表及正常研究结论。原始响应保留供复核；请核验数据后新建研究。", "evidence_ids": [item["id"]]})
+                    continue
                 if item["is_demo"]:
                     statement = "DEMO DATA：此条为演示证据，不可用于真实结论。"
                 elif "snapshot" in data:
                     row = data["snapshot"]
-                    statement = f"扶摇行情快照：价格 {number(row.get('price_cny'))} 元，涨跌幅 {number(row.get('change_percent'))}%。取得 {len(data.get('prices', []))} 条前复权日线。数据时间（北京时间）{datetime.fromtimestamp(data["timestamp_ms"]/1000, timezone(timedelta(hours=8))).strftime("%Y-%m-%d %H:%M:%S") if isinstance(data.get("timestamp_ms"), (int, float)) else "未提供"}；非交易时间为最近可用数据。"
+                    statement = f"扶摇行情快照：价格 {number(row.get('price_cny'))} 元，涨跌幅 {number(row.get('change_percent'))}%。取得 {len(data.get('prices', []))} 条前复权日线。接口时间（北京时间）{datetime.fromtimestamp(data['timestamp_ms']/1000, timezone(timedelta(hours=8))).strftime('%Y-%m-%d %H:%M:%S') if isinstance(data.get('timestamp_ms'), (int, float)) else '未提供'}；接口时间不保证等于最新成交时间。"
                 elif "valuation" in data:
                     row = data["valuation"]
                     statement = f"估值：PE(TTM) {number(row.get('pe_ttm'))} 倍，PB(MRQ) {number(row.get('pb'))} 倍。倍数反映市场定价，缺少同业和历史区间，不能单凭倍数认定低估或高估。"
@@ -254,6 +266,9 @@ class RunService:
                         growth = (latest['revenue'] / rows[-2]['revenue'] - 1) * 100
                         statement += f"营业收入较上一可用年度变化 {growth:.2f}%；"
                         statement += "银行盈利需结合净息差、信用减值与非息收入验证，利润表总额不足以判断资产质量。" if is_bank else "需结合现金回款验证盈利质量。"
+                notices = [issue["message"] for issue in quality.get("issues", []) if issue["code"] in {"TIME_STALE", "HISTORY_STALE", "TIME_MISSING", "FINANCIAL_STALE", "PERIOD_GAP", "VALUATION_NONPOSITIVE"}]
+                if notices:
+                    statement += " 质量提示：" + "；".join(notices)
                 findings.append({"task": item["title"], "statement": statement, "evidence_ids": [item["id"]]})
                 if data.get("missing_information"):
                     missing.append(data["missing_information"])
@@ -266,7 +281,9 @@ class RunService:
             missing.extend(["数据来自扶摇接口，尚未与交易所原始公告交叉核验；行情时间以证据记录为准。", "缺少历史估值区间、同业比较及完整财务报表，无法可靠计算公允价值或目标价。", "年度变化为相邻可用年度比较，仍需核对报表口径、会计调整及可比性，不能据此解释变化原因。", "COMPLETE 表示任务执行完成；研究覆盖有限，不表示风险核验已完成。"])
             if stop_reason:
                 missing.append(stop_reason)
-            return {"title": f"{'银行风险初步研究' if bank_risk else focus_title}：{run['goal']}", "status": status, "data_notice": "FUYAO / MARKET DATA · 真实接口数据；非交易时段为最近可用行情。", "coverage_status": "LIMITED", "executive_summary": f"完成 {len(evidence)}/{len(tasks)} 项证据任务。本次范围：{'；'.join(scope)}。报告仅依据取得的证据整理；研究覆盖有限，不能替代完整核验。", "findings": findings, "missing_information": missing, "evidence_ids": [item["id"] for item in evidence]}
+            quality_rows = [{"evidence_id": item["id"], **item["data"]["quality"]} for item in evidence if item["data"].get("quality")]
+            quality_status = "FAIL" if any(row["status"] == "FAIL" for row in quality_rows) else "WARN" if any(row["status"] == "WARN" for row in quality_rows) else "PASS" if quality_rows else "NOT_CHECKED"
+            return {"title": f"{'银行风险初步研究' if bank_risk else focus_title}：{run['goal']}", "status": status, "data_notice": "FUYAO / MARKET DATA · 接口数据；新鲜度和可用性以证据质量提示为准。", "coverage_status": "LIMITED", "quality_status": quality_status, "quality_checks": quality_rows, "executive_summary": f"取得 {len(evidence)}/{len(tasks)} 项证据，其中 {sum(item['data'].get('quality', {}).get('usable', True) for item in evidence)} 项未被质量检查阻断。本次范围：{'；'.join(scope)}。报告仅依据取得的证据整理；研究覆盖有限，不能替代完整核验。", "findings": findings, "missing_information": list(dict.fromkeys(missing)), "evidence_ids": [item["id"] for item in evidence]}
         by_task = {item["task_id"]: item for item in evidence}
         findings = []
         missing = []

@@ -5,7 +5,7 @@ export type AppMode = 'api' | 'demo';
 export type ApiResult<T> = { ok: true; data: T } | { ok: false; error: string };
 export interface ApiTask { id: string; position: number; title: string; tool_name: string; arguments: Record<string, unknown>; rationale: string; status: string; attempts: number; evidence_id: string | null; error: string | null }
 export interface ApiPlan { research_type?: string; scope?: string[]; limitations?: string[]; research_goal: string; tasks: Array<{ title: string; tool_name: string; arguments: Record<string, unknown>; rationale: string }> }
-export interface ApiReport { title: string; status: string; data_notice: string; executive_summary: string; findings: Array<{ task: string; statement: string; evidence_ids: string[] }>; missing_information: string[]; evidence_ids: string[] }
+export interface ApiReport { title: string; status: string; data_notice: string; quality_status?: string; executive_summary: string; findings: Array<{ task: string; statement: string; evidence_ids: string[] }>; missing_information: string[]; evidence_ids: string[] }
 export interface ApiRun { id: string; thread_id: string; goal: string; status: ApiRunStatus; plan_version: number; planner_mode: string; plan: ApiPlan | null; approval: { plan_version: number; allowed_tools: string[]; approved_at: string } | null; report: ApiReport | null; error: string | null; created_at: string; updated_at: string; started_at: string | null; completed_at: string | null; tasks: ApiTask[]; usage: { prompt_tokens: number; completion_tokens: number; total_tokens: number; estimated_cost_usd: number | null; cost_status: string } }
 export interface ApiEvent { id: number; event_type: string; data: Record<string, unknown>; created_at: string }
 export interface ApiEvidence { id: string; task_id: string; tool_name: string; title: string; data: Record<string, unknown>; is_demo: boolean; created_at: string }
@@ -81,13 +81,17 @@ function evidencePeriod(item: ApiEvidence): string {
   return String(item.data.as_of ?? (item.is_demo ? 'Fixture snapshot' : '时间未提供'));
 }
 function mapEvidence(item: ApiEvidence): ResearchEvidence {
-  return { id: item.id, title: item.title, type: item.tool_name, period: evidencePeriod(item), detail: JSON.stringify(item.data, null, 2), limitation: String(item.data.missing_information ?? (item.is_demo ? 'FIXTURE / DEMO DATA；并非实时金融数据。' : '扶摇接口数据，时间以返回时间戳为准；尚未交叉核验。')), isDemo: item.is_demo, toolName: item.tool_name, data: item.data };
+  const quality = item.data.quality as { status?: string; issues?: { message: string }[] } | undefined;
+  const limitation = [item.data.missing_information, ...(quality?.issues?.map(issue => issue.message) ?? [])].filter(Boolean).join('；');
+  return { id: item.id, title: item.title, type: item.tool_name, period: evidencePeriod(item), detail: JSON.stringify(item.data, null, 2), limitation: limitation || (item.is_demo ? 'FIXTURE / DEMO DATA；并非实时金融数据。' : '质量未检查；扶摇接口时间不保证为成交时间，尚未交叉核验。'), isDemo: item.is_demo, toolName: item.tool_name, data: item.data };
 }
 function mapReport(report: ApiReport | null): ResearchReportData | null {
-  return report ? { title: report.title, status: report.status, dataNotice: report.data_notice, executiveSummary: report.executive_summary, findings: report.findings.map(item => ({ task: item.task, statement: item.statement, evidenceIds: item.evidence_ids })), missingInformation: report.missing_information, evidenceIds: report.evidence_ids } : null;
+  return report ? { title: report.title, status: report.status, qualityStatus: report.quality_status ?? 'NOT_CHECKED', dataNotice: report.data_notice, executiveSummary: report.executive_summary, findings: report.findings.map(item => ({ task: item.task, statement: item.statement, evidenceIds: item.evidence_ids })), missingInformation: report.missing_information, evidenceIds: report.evidence_ids } : null;
 }
 function evidenceDataset(items: ApiEvidence[], report: ApiReport | null): Dataset | null {
   if (!items.length) return null;
+  items = items.filter(item => (item.data.quality as { usable?: boolean } | undefined)?.usable !== false);
+  if (!items.length) return { isDemo: false, metrics: [{ label: '市盈率 PE (TTM)', value: '—', unit: '倍', note: '证据质量未通过' }, { label: '市净率 PB', value: '—', unit: '倍', note: '证据质量未通过' }, { label: '净资产收益率 ROE', value: '—', unit: '%', note: '证据质量未通过' }], prices: [], financials: [], findings: [] };
   const snapshot = items.find(item => item.tool_name === 'get_market_snapshot')?.data;
   const valuation = items.find(item => item.tool_name === 'get_valuation_snapshot')?.data.valuation as Record<string, unknown> | null | undefined;
   const financial = items.find(item => item.tool_name === 'get_financial_summary')?.data.financials as Record<string, unknown> | null | undefined;
