@@ -4,6 +4,12 @@ Investment X Buddy 是面向个人投资研究者的 AI Agent 工作台。用户
 
 > 当前状态：前端、FastAPI Harness、Fixture 主链路和本地前后端联调均已完成；**Render 后端与 Netlify 前端已公开上线并通过健康检查与 CORS 预检，前端已切至 FASTAPI MODE 与后端联通**。所有 Fixture 金融数值均为 **DEMO DATA**，不是实时行情或投资建议。
 
+## 界面预览
+
+![Investment X Buddy 实际线上工作台](docs/images/workbench.png)
+
+研究创建前的实际界面，展示目标输入、研究区域及 Agent 执行监控。数据来源以执行后的 Evidence 标识为准。
+
 ## 解决的问题
 
 普通聊天式研究容易混淆计划、数据来源和模型结论。Investment X Buddy 把研究过程拆成可观察的对象：目标属于 Thread，单次尝试属于 Run，计划步骤属于 Task，工具结果保存为 Evidence，最终报告作为 Artifact 展示。用户可以在执行前审查计划和工具权限，并在失败后查看事件与恢复点。
@@ -67,10 +73,17 @@ XBuddy/
 
 ## 本地运行
 
+需要 Python、Node.js 和 npm。以下命令以 PowerShell 为例；先克隆仓库，然后从仓库根目录执行：
+
+```powershell
+git clone https://github.com/PYC1234/investment-x-buddy.git
+Set-Location investment-x-buddy
+```
+
 ### 后端（PowerShell）
 
 ```powershell
-Set-Location C:\Users\29248\Desktop\XBuddy\backend
+Set-Location .\backend
 python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
 .\.venv\Scripts\python.exe -m uvicorn app.main:app --reload --port 8000
@@ -78,10 +91,10 @@ python -m venv .venv
 
 健康检查：`http://127.0.0.1:8000/api/v1/health`；OpenAPI：`http://127.0.0.1:8000/docs`。
 
-### 前端（另一个 PowerShell）
+### 前端（在另一个 PowerShell 中，从仓库根目录执行）
 
 ```powershell
-Set-Location C:\Users\29248\Desktop\XBuddy\frontend
+Set-Location .\frontend
 npm install
 Copy-Item .env.example .env.local
 npm run dev
