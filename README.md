@@ -6,9 +6,9 @@ Investment X Buddy 是面向个人投资研究者的 AI Agent 工作台。用户
 
 ## 界面预览
 
-![Investment X Buddy 实际线上工作台](docs/images/workbench.png)
+[![Investment X Buddy 贵州茅台估值与风险分析完整长图](docs/images/maotai-analysis.png)](docs/images/maotai-analysis.png)
 
-研究创建前的实际界面，展示目标输入、研究区域及 Agent 执行监控。数据来源以执行后的 Evidence 标识为准。
+贵州茅台估值与风险分析实际案例：从研究问题、估值指标、行情与财务图表，到完整报告、风险限制和证据引用；右侧展示 Agent 运行监控。点击图片查看原尺寸长图。数据来源与时点以证据记录为准，不构成投资建议。
 
 ## 解决的问题
 
