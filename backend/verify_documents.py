@@ -24,7 +24,14 @@ with httpx.Client(timeout=60) as client:
     result = upload('产品,代码,收益\n公开测试A,001,3%\n公开测试B,002,5%\n'.encode(), 'public-smoke.csv')
     assert result['statistics'][0]['mean'] == 4
     assert result['model_status'] == 'not_requested'
+    assert 'history_id' not in result
     record['checks'].append({'name': 'csv_values_and_source', 'pass': True, 'source': result['statistics'][0]['min_source']})
+    assert client.get(base + '/api/v1/documents/history').status_code == 403
+    saved = client.post(base + '/api/v1/documents/analyze', json={
+        'filename': 'public-smoke.csv', 'content_base64': base64.b64encode(b'product,value\nA,1\n').decode(),
+        'save_history': True, 'use_model': False})
+    assert saved.status_code == 403
+    record['checks'].append({'name': 'anonymous_without_login_and_no_saved_history', 'pass': True})
     invalid = client.post(base + '/api/v1/documents/analyze', json={'filename': 'x.csv', 'content_base64': '!'})
     assert invalid.status_code == 422
     record['checks'].append({'name': 'invalid_base64', 'pass': True})

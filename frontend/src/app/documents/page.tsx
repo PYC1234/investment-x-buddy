@@ -1,9 +1,9 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { documentStyles } from './styles';
-import { privateFetch } from '@/lib/identity';
+import { privateFetch, storedIdentity } from '@/lib/identity';
 
 type Evidence = { id: string; location: string; text: string };
 type Analysis = {
@@ -27,15 +27,32 @@ export default function Documents() {
   const [files, setFiles] = useState<File[]>([]);
   const [useModel, setUseModel] = useState(false);
   const [saveHistory, setSaveHistory] = useState(false);
+  const [signedIn, setSignedIn] = useState(false);
   const [results, setResults] = useState<Analysis[]>([]);
   const [error, setError] = useState('');
   const [progress, setProgress] = useState('');
   const [busy, setBusy] = useState(false);
   const controller = useRef<AbortController | null>(null);
 
+  useEffect(() => {
+    const refresh = () => {
+      const loggedIn = storedIdentity()?.user.kind === 'account';
+      setSignedIn(loggedIn);
+      if (!loggedIn) setSaveHistory(false);
+    };
+    refresh();
+    window.addEventListener('focus', refresh);
+    window.addEventListener('pageshow', refresh);
+    return () => {window.removeEventListener('focus', refresh); window.removeEventListener('pageshow', refresh);};
+  }, []);
+
   async function analyze() {
     if (!files.length) return;
     setError(''); setResults([]);
+    if (saveHistory && storedIdentity()?.user.kind !== 'account') {
+      setSignedIn(false); setSaveHistory(false);
+      setError('登录状态已失效，已关闭保存历史。你可以直接再次分析，无需登录。'); return;
+    }
     if (!base) {setError('当前环境尚未连接资料分析服务，请完成后端部署与API地址配置。'); return;}
     if (files.length > 3 || files.some(f => f.size > 3*1024*1024 || !/\.(csv|pdf)$/i.test(f.name))) {
       setError('一次最多3份CSV或PDF，每份不超过3MB。'); return;
@@ -68,8 +85,8 @@ export default function Documents() {
 
   return <main className="document-workspace">
     <style>{documentStyles}</style>
-    <nav><Link href="/">← 返回投资研究</Link><Link href="/account">账号与个人历史</Link></nav>
-    <header><span className="document-eyebrow">DOCUMENT WORKSPACE</span><h1>把资料变成有来源的分析</h1><p>上传公开基金报告或产品数据表，整理字段、比较同列指标，并保留每条结果的出处。</p></header>
+    <nav><Link href="/">← 返回投资研究</Link><Link href="/account">{signedIn ? '我的历史与偏好' : '登录 / 注册（可选）'}</Link></nav>
+    <header><span className="document-eyebrow">DOCUMENT WORKSPACE</span><h1>把资料变成有来源的分析</h1><p>上传公开基金报告或产品数据表，整理字段、比较同列指标，并保留每条结果的出处。</p><p>{signedIn ? '已登录：可按需保存到自己的历史。' : '无需注册或登录，选择资料或使用示例数据，即可直接分析和导出。匿名分析不保存到个人历史。'}</p></header>
     <section className="document-card">
       <h2>1. 选择公开资料</h2>
       <p>CSV支持UTF-8或GB编码、最多5000条记录；PDF支持可复制文字的版本、最多30页。一次最多3份，每份3MB。</p>
@@ -78,7 +95,7 @@ export default function Documents() {
       <button onClick={() => download('\uFEFF'+example, '产品对比模板-示例.csv', 'text/csv;charset=utf-8')}>下载CSV模板</button>
       <ul>{files.map((file, i) => <li key={i}>{file.name} · {(file.size/1024).toFixed(1)} KB</li>)}</ul>
       <p className="document-note">原文件不落盘；默认不保存结果。勾选保存后，结果和摘录仅供当前账号访问。演示存储可能随服务器重启丢失，请导出备份。</p>
-      <label className="document-consent"><input type="checkbox" checked={saveHistory} disabled={busy} onChange={e=>setSaveHistory(e.target.checked)}/>保存到我的历史（需先登录；保存分析结果及引用，不保存原文件）</label>
+      {signedIn ? <label className="document-consent"><input type="checkbox" checked={saveHistory} disabled={busy} onChange={e=>setSaveHistory(e.target.checked)}/>保存到我的历史（可选；保存分析结果及引用，不保存原文件）</label> : <p className="document-note">想在之后查看历史或保存偏好？可<Link href="/account">登录 / 注册</Link>；不影响本次匿名分析和导出。</p>}
       <label className="document-consent"><input type="checkbox" checked={useModel} disabled={busy} onChange={e=>setUseModel(e.target.checked)}/>额外生成AI摘要：同意将选中的原文片段发送至服务器配置的模型服务，可能产生调用费用。默认关闭。</label>
       <div className="document-actions"><button className="document-primary" onClick={analyze} disabled={busy || !files.length}>{busy ? '正在处理…' : '开始分析'}</button>{busy && <button onClick={()=>controller.current?.abort()}>取消等待</button>}</div>
       <p role="status" aria-live="polite">{progress}</p>{error && <p role="alert" className="document-error">{error}</p>}

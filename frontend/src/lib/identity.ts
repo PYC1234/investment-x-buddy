@@ -20,7 +20,14 @@ export const signIn=(username:string,password:string,register:boolean)=>auth(reg
 export async function privateFetch(path:string,init:RequestInit={}){
   if(!base)throw new Error('服务未配置');
   const current=await identity();
-  const r=await fetch(`${base}${path}`,{...init,cache:'no-store',headers:{'Content-Type':'application/json',...init.headers,Authorization:`Bearer ${current.token}`}});
-  if(r.status===401){sessionStorage.removeItem(key);localStorage.removeItem('investment-x-buddy.active-run');}return r;
+  const send=(session:Identity)=>fetch(`${base}${path}`,{...init,cache:'no-store',headers:{'Content-Type':'application/json',...init.headers,Authorization:`Bearer ${session.token}`}});
+  const r=await send(current);
+  if(r.status!==401)return r;
+  // A restart can invalidate a still-unexpired guest token. Renew it silently,
+  // but never turn an authenticated account request into an anonymous write.
+  if(storedIdentity()?.token!==current.token)return r;
+  sessionStorage.removeItem(key);localStorage.removeItem('investment-x-buddy.active-run');
+  if(current.user.kind!=='guest'||init.signal?.aborted||path.startsWith('/api/v1/auth/'))return r;
+  return send(await identity());
 }
 export async function signOut(){const r=await privateFetch('/api/v1/auth/logout',{method:'POST'});if(!r.ok)throw new Error('退出失败，请稍后重试');sessionStorage.removeItem(key);localStorage.removeItem('investment-x-buddy.active-run');}
