@@ -1,4 +1,5 @@
 from functools import lru_cache
+import os
 from pathlib import Path
 from typing import Literal
 
@@ -10,11 +11,21 @@ PROJECT_ROOT = Path(__file__).resolve().parents[3]
 BACKEND_ROOT = Path(__file__).resolve().parents[2]
 
 
+def settings_env_files() -> tuple[Path, ...]:
+    """Read Render secret-file mounts as dotenv; process variables still win."""
+    files = [PROJECT_ROOT / '.env']
+    if os.environ.get('RENDER', '').lower() == 'true':
+        files += [PROJECT_ROOT / '.env.render-import',
+                  BACKEND_ROOT / '.env', BACKEND_ROOT / '.env.render-import',
+                  Path('/etc/secrets/.env'), Path('/etc/secrets/.env.render-import')]
+    return tuple(files)
+
+
 class Settings(BaseSettings):
-    """Application settings loaded from process variables and the project .env."""
+    """Application settings from process variables, local dotenv and Render mounts."""
 
     model_config = SettingsConfigDict(
-        env_file=PROJECT_ROOT / ".env",
+        env_file=settings_env_files(),
         env_file_encoding="utf-8",
         extra="ignore",
         case_sensitive=False,
