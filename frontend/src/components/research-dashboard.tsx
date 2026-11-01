@@ -4,6 +4,7 @@ import { BarChart3, ListChecks, ScrollText, Server } from 'lucide-react';
 import { Sidebar } from '@/components/sidebar';
 import { ResearchHeader } from '@/components/research-header';
 import { ResearchInput } from '@/components/research-input';
+import { useDocumentConversation } from '@/components/document-conversation';
 import { FinancialCharts, FinancialMetrics } from '@/components/financial-charts';
 import { ResearchReport } from '@/components/research-report';
 import { ResearchPlan } from '@/components/research-plan';
@@ -23,6 +24,7 @@ export function ResearchDashboard() {
   const [threads, setThreads] = useState<ResearchThread[]>(() => configuredMode === 'api' ? [{ ...createThread('api-draft', '研究工作台', '', '新的研究线程'), updated: '尚未创建研究', apiTools: [] }] : initialThreads);
   const [activeId, setActiveId] = useState(configuredMode === 'api' ? 'api-draft' : 'maotai');
   const active = threads.find(thread => thread.id === activeId) ?? threads[0];
+  const documents = useDocumentConversation(activeId);
   const [goal, setGoal] = useState(active.goal);
   const [mode, setMode] = useState<AppMode>(configuredMode);
   const [apiError, setApiError] = useState<string | null>(null);
@@ -131,6 +133,11 @@ export function ResearchDashboard() {
   };
 
   const start = async () => {
+    if (documents.hasDocuments) {
+      setTab('Research');
+      await documents.send(goal);
+      return;
+    }
     if (mode === 'demo') {
       updateById(active.id, thread => transition(thread, { type: 'START', goal }));
       return;
@@ -168,12 +175,12 @@ export function ResearchDashboard() {
     <section className="workspace">
       <ResearchHeader thread={active} onMenu={() => setSidebarOpen(true)} mode={mode} />
       <div className="workspace-inner">
-        <ResearchInput thread={active} goal={goal} setGoal={setGoal} onStart={start} />
-        <nav className="tabs" aria-label="工作区标签">{([['Research', BarChart3], ['Plan', ListChecks], ['Trace', ScrollText]] as const).map(([tab, Icon]) => <button key={tab} data-testid={`tab-${tab.toLowerCase()}`} className={active.tab === tab ? 'active' : ''} onClick={() => setTab(tab)}><Icon />{tab}{tab === 'Plan' && active.status === 'approval' && <span className="tab-alert">1</span>}</button>)}</nav>
+        <ResearchInput thread={active} goal={goal} setGoal={setGoal} onStart={start} documentMode={documents.hasDocuments} busy={documents.busy}>{documents.controls}</ResearchInput>
+        <nav className="tabs" aria-label="工作区标签">{([['Research', BarChart3], ['Plan', ListChecks], ['Trace', ScrollText]] as const).filter(([tab])=>!documents.hasDocuments||tab==='Research').map(([tab, Icon]) => <button key={tab} data-testid={`tab-${tab.toLowerCase()}`} className={(documents.hasDocuments||active.tab === tab) ? 'active' : ''} onClick={() => setTab(tab)}><Icon />{documents.hasDocuments?'资料对话':tab}{tab === 'Plan' && active.status === 'approval' && <span className="tab-alert">1</span>}</button>)}</nav>
         <div className="tab-content">
-          {active.tab === 'Research' && <><FinancialMetrics data={data} state={active.loading ? 'loading' : data ? 'ready' : 'empty'} /><FinancialCharts data={data} state={active.loading ? 'loading' : data ? 'ready' : 'empty'} /><ResearchReport thread={active} data={data} onEvidence={setEvidenceId} mode={mode} /></>}
-          {active.tab === 'Plan' && <ResearchPlan thread={active} expanded={expanded} setExpanded={setExpanded} onAction={dispatch} mode={mode} />}
-          {active.tab === 'Trace' && <ExecutionTrace thread={active} />}
+          {(active.tab === 'Research'||documents.hasDocuments) && <>{documents.messages}{!documents.hasDocuments&&<><FinancialMetrics data={data} state={active.loading ? 'loading' : data ? 'ready' : 'empty'} /><FinancialCharts data={data} state={active.loading ? 'loading' : data ? 'ready' : 'empty'} /><ResearchReport thread={active} data={data} onEvidence={setEvidenceId} mode={mode} /></>}</>}
+          {!documents.hasDocuments&&active.tab === 'Plan' && <ResearchPlan thread={active} expanded={expanded} setExpanded={setExpanded} onAction={dispatch} mode={mode} />}
+          {!documents.hasDocuments&&active.tab === 'Trace' && <ExecutionTrace thread={active} />}
         </div>
       </div>
     </section>

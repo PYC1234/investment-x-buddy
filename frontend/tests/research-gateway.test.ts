@@ -3,10 +3,19 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { ResearchPlan } from '../src/components/research-plan';
 import { ResearchReport } from '../src/components/research-report';
 import { buildExampleGoal } from '../src/components/research-input';
+import { ResearchInput } from '../src/components/research-input';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { applyBundle, type RunBundle } from '../src/lib/research-gateway';
 import { initialThreads } from '../src/data/demo';
+
+test('资料问题复用研究输入框，附件模式不显示股票示例或新页面链接',()=>{
+  const html=renderToStaticMarkup(createElement(ResearchInput,{thread:initialThreads[0],goal:'比较附件费用',setGoal:()=>{},onStart:()=>{},documentMode:true},createElement('span',null,'添加对话资料')));
+  assert.match(html,/当前来源：已附资料/);
+  assert.match(html,/发送资料问题/);
+  assert.match(html,/添加对话资料/);
+  assert.doesNotMatch(html,/贵州茅台|href="\/documents"/);
+});
 
 test('质量失败证据保留供复核但不进入图表或指标，报告显示质量状态', () => {
   const data = bundle();

@@ -23,6 +23,7 @@ class DocumentRequest(BaseModel):
     content_base64: str = Field(min_length=1, max_length=4 * 1024 * 1024)
     use_model: bool = False
     save_history: bool = False
+    question: str = Field(default='', max_length=1000)
 
 
 def extract(request: DocumentRequest) -> dict:
@@ -125,7 +126,8 @@ def extract(request: DocumentRequest) -> dict:
             for source in evidence:
                 for match in re.finditer(pattern, source['text']):
                     fields.append({'field': label, 'value': match[1], 'evidence_id': source['id'], 'location': source['location']})
-    selected = sorted(evidence, key=lambda e: bool(re.search(r'风险|收益|费用|业绩|投资策略|规模', e['text'])), reverse=True)[:12]
+    terms = re.findall(r'[A-Za-z0-9_]+|[\u4e00-\u9fff]{2}', request.question)
+    selected = sorted(evidence, key=lambda e: (sum(term.lower() in e['text'].lower() for term in terms), bool(re.search(r'风险|收益|费用|业绩|投资策略|规模', e['text']))), reverse=True)[:12]
     needed = {s[k] for s in stats for k in ('min_source', 'max_source')}
     needed.update(f['evidence_id'] for f in fields)
     selected_ids = {e['id'] for e in selected}
