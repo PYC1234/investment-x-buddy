@@ -1,4 +1,5 @@
 import { datasets, evidence, initialThreads, toolsRegistry } from '@/data/demo';
+import { privateFetch } from './identity';
 import type { ApiRunStatus, Dataset, Preferences, ResearchEvidence, ResearchReportData, ResearchTask, ResearchThread, ToolCall, ToolDefinition, TraceEvent } from '@/types/research';
 
 export type AppMode = 'api' | 'demo';
@@ -21,7 +22,7 @@ export const configuredMode: AppMode = rawBase ? 'api' : 'demo';
 async function request<T>(path: string, init?: RequestInit): Promise<ApiResult<T>> {
   if (!rawBase) return { ok: false, error: '未配置 NEXT_PUBLIC_API_BASE_URL' };
   try {
-    const response = await fetch(`${rawBase}${path}`, { cache: 'no-store', ...init, headers: { 'Content-Type': 'application/json', ...init?.headers } });
+    const response = await privateFetch(path, init);
     if (!response.ok) {
       let detail = '';
       try { const body = await response.json() as { error?: { message?: string } }; detail = body.error?.message ? ` · ${body.error.message}` : ''; } catch { /* non-JSON error */ }

@@ -25,10 +25,16 @@ def build_service(path: Path, **overrides) -> tuple[Settings, RunService]:
     return settings, RunService(settings, SQLiteStore(path), build_tool_registry(), FixturePlanner())
 
 
+_test_sessions: dict[str, str] = {}
+
 async def api_client(settings: Settings, service: RunService) -> AsyncClient:
     app = create_app(settings)
     app.dependency_overrides[get_run_service] = lambda: service
-    return AsyncClient(transport=ASGITransport(app=app, raise_app_exceptions=False), base_url="http://testserver")
+    key = str(settings.sqlite_path)
+    if key not in _test_sessions:
+        async with AsyncClient(transport=ASGITransport(app=app, raise_app_exceptions=False), base_url='http://testserver') as bootstrap:
+            _test_sessions[key] = (await bootstrap.post('/api/v1/auth/guest')).json()['token']
+    return AsyncClient(transport=ASGITransport(app=app, raise_app_exceptions=False), base_url='http://testserver', headers={'Authorization': 'Bearer '+_test_sessions[key]})
 
 
 @pytest.mark.anyio

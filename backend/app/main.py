@@ -22,10 +22,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         CORSMiddleware,
         allow_origins=active_settings.cors_origins,
         allow_credentials=True,
-        allow_methods=["GET", "POST", "OPTIONS"],
+        allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
         allow_headers=["Accept", "Authorization", "Content-Type", "Last-Event-ID"],
     )
     register_error_handlers(app)
+    @app.middleware('http')
+    async def private_cache_headers(request, call_next):
+        response = await call_next(request)
+        if request.url.path.startswith(active_settings.api_v1_prefix) and request.url.path != active_settings.api_v1_prefix + '/events/demo':
+            response.headers['Cache-Control'] = 'no-store'
+        return response
     app.include_router(api_router, prefix=active_settings.api_v1_prefix)
     return app
 

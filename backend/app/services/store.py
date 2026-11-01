@@ -78,6 +78,14 @@ class SQLiteStore:
         """
         with self.connection() as connection:
             connection.executescript(schema)
+            if 'owner_id' not in {row[1] for row in connection.execute('PRAGMA table_info(threads)')}:
+                connection.execute('ALTER TABLE threads ADD COLUMN owner_id TEXT')
+            connection.executescript('''
+            CREATE TABLE IF NOT EXISTS users(id TEXT PRIMARY KEY, username TEXT UNIQUE, salt TEXT, password_hash TEXT, kind TEXT NOT NULL, preferences TEXT NOT NULL DEFAULT '{}');
+            CREATE TABLE IF NOT EXISTS sessions(token_hash TEXT PRIMARY KEY, user_id TEXT NOT NULL, expires REAL NOT NULL);
+            CREATE TABLE IF NOT EXISTS auth_limits(key TEXT PRIMARY KEY, count INTEGER NOT NULL, expires REAL NOT NULL);
+            CREATE TABLE IF NOT EXISTS document_history(id TEXT PRIMARY KEY, owner_id TEXT NOT NULL, filename TEXT NOT NULL, result TEXT NOT NULL, created REAL NOT NULL);
+            ''')
 
     @staticmethod
     def decode_row(row: sqlite3.Row | None) -> dict[str, Any] | None:

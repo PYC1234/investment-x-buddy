@@ -422,8 +422,8 @@ class RunService:
             raise AppError(status_code=409, code="report_not_ready", message="Report is not available yet.")
         return run["report"]
 
-    def list_threads(self) -> list[dict[str, Any]]:
-        threads = self.store.fetch_all("SELECT * FROM threads ORDER BY updated_at DESC")
+    def list_threads(self, owner_id: str | None = None) -> list[dict[str, Any]]:
+        threads = self.store.fetch_all("SELECT * FROM threads WHERE owner_id=? ORDER BY updated_at DESC", (owner_id,))
         for thread in threads:
             thread["memory"] = self.get_memory(thread["id"])
             thread["runs"] = self.store.fetch_all("SELECT id,goal,status,planner_mode,created_at,updated_at FROM runs WHERE thread_id=? ORDER BY created_at DESC", (thread["id"],))

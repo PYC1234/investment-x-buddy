@@ -3,6 +3,7 @@
 import { useRef, useState } from 'react';
 import Link from 'next/link';
 import { documentStyles } from './styles';
+import { privateFetch } from '@/lib/identity';
 
 type Evidence = { id: string; location: string; text: string };
 type Analysis = {
@@ -25,6 +26,7 @@ function download(text: string, filename: string, type: string) {
 export default function Documents() {
   const [files, setFiles] = useState<File[]>([]);
   const [useModel, setUseModel] = useState(false);
+  const [saveHistory, setSaveHistory] = useState(false);
   const [results, setResults] = useState<Analysis[]>([]);
   const [error, setError] = useState('');
   const [progress, setProgress] = useState('');
@@ -48,15 +50,15 @@ export default function Documents() {
         const bytes = new Uint8Array(await file.arrayBuffer());
         let binary = '';
         for (let i=0; i<bytes.length; i+=8192) binary += String.fromCharCode(...bytes.subarray(i, i+8192));
-        const response = await fetch(`${base}/api/v1/documents/analyze`, {
+        const response = await privateFetch('/api/v1/documents/analyze', {
           method: 'POST', headers: {'Content-Type': 'application/json'}, signal: abort.signal,
-          body: JSON.stringify({filename: file.name, content_base64: btoa(binary), use_model: useModel}),
+          body: JSON.stringify({filename: file.name, content_base64: btoa(binary), use_model: useModel, save_history: saveHistory}),
         });
         const body = await response.json();
         if (!response.ok) throw new Error(`${file.name}：${body.error?.message || body.detail || '分析失败'}`);
         completed.push(body); setResults([...completed]);
       }
-      setProgress(`完成 ${completed.length} 份资料。结果仅保留在当前页面，请及时导出。`);
+      setProgress(`完成 ${completed.length} 份资料。${saveHistory ? '已保存到当前账号历史。' : '未保存到账号，请及时导出。'}`);
     } catch (e) {
       setError(e instanceof Error && e.name === 'AbortError' ? '任务已取消或超时，已完成的结果保留，可重新分析。' : e instanceof Error ? e.message : '连接失败，请稍后重试。');
     } finally {clearTimeout(timeout); setBusy(false); controller.current = null;}
@@ -66,7 +68,7 @@ export default function Documents() {
 
   return <main className="document-workspace">
     <style>{documentStyles}</style>
-    <nav><Link href="/">← 返回投资研究</Link><span>XBuddy / 资料分析</span></nav>
+    <nav><Link href="/">← 返回投资研究</Link><Link href="/account">账号与个人历史</Link></nav>
     <header><span className="document-eyebrow">DOCUMENT WORKSPACE</span><h1>把资料变成有来源的分析</h1><p>上传公开基金报告或产品数据表，整理字段、比较同列指标，并保留每条结果的出处。</p></header>
     <section className="document-card">
       <h2>1. 选择公开资料</h2>
@@ -75,7 +77,8 @@ export default function Documents() {
       <button disabled={busy} onClick={() => resetSelection([new File([example], '示例产品数据-非真实产品.csv', {type: 'text/csv'})])}>使用示例数据</button>
       <button onClick={() => download('\uFEFF'+example, '产品对比模板-示例.csv', 'text/csv;charset=utf-8')}>下载CSV模板</button>
       <ul>{files.map((file, i) => <li key={i}>{file.name} · {(file.size/1024).toFixed(1)} KB</li>)}</ul>
-      <p className="document-note">文件发送到XBuddy后端进行处理，本功能不落盘、不建立公开文件链接。请仅使用公开资料，不上传客户持仓、身份证件或公司内部文件。</p>
+      <p className="document-note">原文件不落盘；默认不保存结果。勾选保存后，结果和摘录仅供当前账号访问。演示存储可能随服务器重启丢失，请导出备份。</p>
+      <label className="document-consent"><input type="checkbox" checked={saveHistory} disabled={busy} onChange={e=>setSaveHistory(e.target.checked)}/>保存到我的历史（需先登录；保存分析结果及引用，不保存原文件）</label>
       <label className="document-consent"><input type="checkbox" checked={useModel} disabled={busy} onChange={e=>setUseModel(e.target.checked)}/>额外生成AI摘要：同意将选中的原文片段发送至服务器配置的模型服务，可能产生调用费用。默认关闭。</label>
       <div className="document-actions"><button className="document-primary" onClick={analyze} disabled={busy || !files.length}>{busy ? '正在处理…' : '开始分析'}</button>{busy && <button onClick={()=>controller.current?.abort()}>取消等待</button>}</div>
       <p role="status" aria-live="polite">{progress}</p>{error && <p role="alert" className="document-error">{error}</p>}

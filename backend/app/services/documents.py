@@ -22,6 +22,7 @@ class DocumentRequest(BaseModel):
     filename: str = Field(min_length=1, max_length=180)
     content_base64: str = Field(min_length=1, max_length=4 * 1024 * 1024)
     use_model: bool = False
+    save_history: bool = False
 
 
 def extract(request: DocumentRequest) -> dict:

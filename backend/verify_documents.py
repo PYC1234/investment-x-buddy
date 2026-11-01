@@ -13,6 +13,9 @@ args = parser.parse_args()
 base = args.base.rstrip('/')
 record = {'base': base, 'model_calls': 0, 'checks': []}
 with httpx.Client(timeout=60) as client:
+    identity = client.post(base + '/api/v1/auth/guest')
+    identity.raise_for_status()
+    client.headers['Authorization'] = 'Bearer ' + identity.json()['token']
     def upload(raw, filename):
         response = client.post(base + '/api/v1/documents/analyze', json={
             'filename': filename, 'content_base64': base64.b64encode(raw).decode(), 'use_model': False})

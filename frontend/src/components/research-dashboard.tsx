@@ -12,6 +12,7 @@ import { AgentMonitor } from '@/components/agent-monitor';
 import { DetailDialog } from '@/components/ui/dialog';
 import { createThread, evidence, initialThreads } from '@/data/demo';
 import { transition } from '@/lib/demo-machine';
+import { identity, privateFetch } from '@/lib/identity';
 import { applyBundle, configuredMode, demoGateway, researchApi, type AppMode } from '@/lib/research-gateway';
 import type { Preferences, ResearchThread, RunAction, WorkspaceTab } from '@/types/research';
 
@@ -32,6 +33,19 @@ export function ResearchDashboard() {
   const [preferences, setPreferences] = useState<Preferences>({ horizon: '3–5 年', risk: '中等', evidence: true });
   const pollInFlight = useRef(false);
   const restored = useRef(false);
+
+  useEffect(() => {
+    if (mode !== 'api') return;
+    let alive = true;
+    void identity().then(async current => {
+      if (current.user.kind !== 'account') return;
+      const response = await privateFetch('/api/v1/auth/preferences');
+      if (!response.ok) return;
+      const saved = await response.json();
+      if (alive) setPreferences(previous => ({horizon:saved.horizon || previous.horizon,risk:saved.risk || previous.risk,evidence:saved.evidence ?? previous.evidence}));
+    }).catch(() => { /* Existing API error handling displays connection failures. */ });
+    return () => { alive = false; };
+  }, [mode]);
 
   useEffect(() => {
     if (mode !== 'api') return;
