@@ -2,7 +2,7 @@
 
 Investment X Buddy 是面向个人投资研究者的 AI Agent 工作台。用户给出研究目标后，系统生成受控研究计划，在用户批准工具范围后执行任务，将数据整理为可追踪的 Evidence 和 Report，并记录成本、时延、检查点与失败状态。
 
-> 当前状态：前端、FastAPI Harness、Fixture 主链路和本地前后端联调均已完成；**Render 后端与 Netlify 前端已公开上线并通过健康检查与 CORS 预检，前端已切至 FASTAPI MODE 与后端联通**。所有 Fixture 金融数值均为 **DEMO DATA**，不是实时行情或投资建议。
+> 当前代码支持受控研究、持久化后台执行、真实事件流、证据覆盖检查与重新审批的补充研究。行情、利润表和估值快照可使用扶摇接口；历史估值、同业、完整财务表及公告工具使用显式导入的公开资料。未配置的资料不会被伪造或自动补齐。所有 Fixture 数值均为 **DEMO DATA**。本次升级的配置、使用和限制见 [Agent 升级说明](docs/AGENT-UPGRADE.md)；本地实现与线上部署状态须分别验收。
 
 ## 界面预览
 
@@ -19,10 +19,11 @@ Investment X Buddy 是面向个人投资研究者的 AI Agent 工作台。用户
 - 研究线程、新建研究目标和历史记录界面
 - Planner 生成结构化任务计划，显式等待审批
 - Tool Registry 白名单与 Pydantic 参数校验
-- Fixture 工具执行、Evidence 引用和确定性报告
+- Fixture / 扶摇 / 导入公开资料工具、Evidence 引用、字段与计算校验和确定性报告
 - 暂停展示、拒绝、取消、失败、重试、部分完成和恢复入口
 - Token、估算成本、工具时延和事件轨迹
-- SQLite 保存 Thread、Run、Task、Evidence、Tool Call、Checkpoint 和 Memory
+- SQLite 保存 Thread、Run、Task、Evidence、Tool Call、Checkpoint、Memory 和带租约的后台任务队列
+- 依赖图、受限并发、真实 SSE、覆盖检查、新版本补充计划与再次审批
 - Demo Mode 与 FastAPI 模式的明确视觉区分
 - PE、PB、ROE、价格和财务趋势可视化；Fixture 数据始终标为 DEMO DATA
 
@@ -50,7 +51,7 @@ Harness 采用轻量、可审计的服务层，而不是复杂编排框架。Pla
 | Thread | 持续研究主题和研究偏好 | SQLite；包含多个 Run |
 | Run | 一次从规划到报告的执行 | 状态、计划版本、用量、错误和报告 |
 | Task | Run 内的有序工具任务 | 参数、状态、尝试次数、Evidence ID |
-| Evidence | 工具结果及其来源 | 与 Task/Run 关联；当前金融工具均为 Fixture |
+| Evidence | 工具结果及其来源 | 与 Task/Run 关联；分别标注 Fixture、扶摇或导入公开资料 |
 | Artifact | 面向用户的研究成果 | 当前以 Report JSON 和前端报告视图呈现；未实现独立制品表或文件导出 |
 
 ## 技术栈

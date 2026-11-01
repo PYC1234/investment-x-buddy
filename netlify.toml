@@ -5,14 +5,14 @@
 
 [build.environment]
   NODE_VERSION = "24"
+  NEXT_PUBLIC_API_BASE_URL = "https://investment-x-buddy.onrender.com"
 
 # Frontend is a fully client-side, static Next.js app: build with static export
 # (`output: "export"`) and publish the `frontend/out` directory. `.next` is a
 # build cache, NOT a publishable directory.
 #
-# NEXT_PUBLIC_API_BASE_URL stays unset until the Render backend is public.
-# Configure it in the Netlify UI (build environment), then trigger a new deploy
-# to enable API mode.
+# The public API origin is safe to include here. All provider credentials stay
+# on the Render backend and must never be included in the frontend build.
 
 # Revalidate the entry document so a refreshed page loads the latest hashed JS.
 [[headers]]

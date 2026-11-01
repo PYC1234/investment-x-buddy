@@ -5,14 +5,14 @@ from httpx import AsyncClient
 
 
 @pytest.mark.anyio
-async def test_health_endpoint(client: AsyncClient) -> None:
+async def test_health_endpoint(client: AsyncClient, test_settings) -> None:
     response = await client.get("/api/v1/health")
 
     assert response.status_code == 200
     body = response.json()
     assert body["service"] == "investment-x-buddy-api"
     assert body["status"] == "ok"
-    assert body["version"] == "0.1.1"
+    assert body["version"] == test_settings.version
     assert datetime.fromisoformat(body["timestamp"]).tzinfo is not None
 
 

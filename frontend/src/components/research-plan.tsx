@@ -9,7 +9,7 @@ type Action = 'APPROVE'|'REJECT'|'PAUSE'|'RESUME'|'CANCEL'|'FAIL'|'RECOVER'|'TIC
 
 export function ResearchPlan({ thread, expanded, setExpanded, onAction, mode }: { thread: ResearchThread; expanded: number | null; setExpanded: (n: number | null) => void; onAction: (action: Action) => void; mode: AppMode }) {
   const steps = mode === 'api'
-    ? (thread.tasks ?? []).map(task => ({ title: task.title, tool: task.toolName, detail: task.rationale, status: task.status, error: task.error, attempts: task.attempts }))
+    ? (thread.tasks ?? []).map(task => ({ title: task.title, tool: task.toolName, detail: [task.rationale, task.question ? `研究问题：${task.question}` : '', task.dependsOn?.length ? `依赖：${task.dependsOn.join('、')}` : '', task.completionCriteria?.length ? `完成标准：${task.completionCriteria.join('；')}` : ''].filter(Boolean).join('；'), status: task.status, error: task.error, attempts: task.attempts }))
     : demoSteps.map((step, index) => ({ ...step, status: index < thread.step ? 'COMPLETED' : 'PENDING', error: null, attempts: 0 }));
   const failedTasks = (thread.tasks ?? []).filter(task => task.status === 'FAILED');
   const retryFailed = mode === 'api' && failedTasks.length > 0;

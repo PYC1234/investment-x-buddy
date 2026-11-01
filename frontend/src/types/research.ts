@@ -4,10 +4,12 @@ export type DataState = 'ready' | 'loading' | 'empty';
 export type ApiRunStatus = 'PLANNING' | 'PENDING_APPROVAL' | 'APPROVED' | 'RUNNING' | 'COMPLETE' | 'PARTIAL' | 'FAILED' | 'REJECTED' | 'CANCELLED';
 export interface TraceEvent { id: number | string; time: string; title: string; detail: string; kind: 'info' | 'success' | 'warning' | 'error'; tokens: number; latency: number }
 export interface Checkpoint { step: number; calls: number; tokens: number; latency: number; approval: 'pending' | 'approved' | 'rejected'; sequence?: number; beforeChars?: number; afterChars?: number }
-export interface ResearchTask { id: string; position: number; title: string; toolName: string; arguments: Record<string, unknown>; rationale: string; status: string; attempts: number; evidenceId: string | null; error: string | null }
+export interface ResearchTask { id: string; position: number; title: string; toolName: string; arguments: Record<string, unknown>; rationale: string; status: string; attempts: number; evidenceId: string | null; error: string | null; taskKey?: string; dependsOn?: string[]; question?: string; completionCriteria?: string[] }
 export interface ResearchEvidence { id: string; title: string; type: string; period: string; detail: string; limitation: string; isDemo: boolean; toolName: string; data: Record<string, unknown> }
 export interface ResearchFinding { task: string; statement: string; evidenceIds: string[] }
-export interface ResearchReportData { title: string; status: string; qualityStatus?: string; dataNotice: string; executiveSummary: string; findings: ResearchFinding[]; missingInformation: string[]; evidenceIds: string[] }
+export interface ResearchReviewData { coverage_status: string; missing_evidence: string[]; next_action: string; supplement_rounds: number; max_supplement_rounds: number; policy: string }
+export interface ReportValidation { status: string; checked_claims: number; semantic_verification: string; policy: string; issues: string[] }
+export interface ResearchReportData { title: string; status: string; qualityStatus?: string; dataNotice: string; executiveSummary: string; findings: ResearchFinding[]; missingInformation: string[]; evidenceIds: string[]; review?: ResearchReviewData; validation?: ReportValidation }
 export interface ToolCall { id: string; toolName: string; attempt: number; status: string; durationMs: number; error: string | null }
 export interface ToolDefinition { name: string; description: string; permission: string; parameters?: Record<string, unknown> }
 export interface ResearchThread {

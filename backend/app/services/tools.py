@@ -6,10 +6,13 @@ from pydantic import BaseModel, Field, ValidationError
 
 
 class ToolExecutionError(Exception):
-    pass
+    def __init__(self, message: str, *, retryable: bool = True):
+        super().__init__(message)
+        self.retryable = retryable
 
 
 class StockArgs(BaseModel):
+    model_config = {"extra": "forbid"}
     symbol: str = Field(pattern=r"^\d{6}\.(SH|SZ)$")
     simulate_failure: bool = False
 
@@ -26,6 +29,8 @@ class RegisteredTool:
     handler: Callable[[BaseModel], dict[str, Any]]
 
     data_source: str = "FIXTURE / DEMO DATA"
+    capability: str = ""
+    limitation: str = "来源、时点与口径以执行后的证据为准"
 
     def public_schema(self) -> dict[str, Any]:
         return {
@@ -33,6 +38,8 @@ class RegisteredTool:
             "description": self.description,
             "parameters": self.args_model.model_json_schema(),
             "data_source": self.data_source,
+            "capability": self.capability,
+            "limitation": self.limitation,
         }
 
 

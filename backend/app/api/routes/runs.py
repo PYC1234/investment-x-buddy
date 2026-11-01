@@ -1,10 +1,13 @@
 from typing import Any
 
-from fastapi import APIRouter, Depends, Request, HTTPException
+from fastapi import APIRouter, Depends, Request, HTTPException, Query
+from fastapi.responses import StreamingResponse
+import asyncio
+import time
 import json
-from app.api.routes.auth import principal
+from app.api.routes.auth import principal, limit
 
-from app.schemas.research import ApprovalRequest, CreateRunRequest, RejectRequest, RetryFailedRequest
+from app.schemas.research import ApprovalRequest, CreateRunRequest, RejectRequest, RetryFailedRequest, SupplementRequest
 from app.services.runs import RunService, get_run_service
 
 
@@ -24,8 +27,8 @@ async def create_run(request: CreateRunRequest, http_request: Request, service: 
         raise HTTPException(404, '研究线程不存在或无访问权限')
     if user['kind'] == 'account' and not request.preferences:
         request = request.model_copy(update={'preferences': json.loads(user['preferences'])})
-    result = await service.create_run(request)
-    service.store.execute('UPDATE threads SET owner_id=? WHERE id=? AND (owner_id IS NULL OR owner_id=?)', (user['id'], result['thread_id'], user['id']))
+    limit(service.store, 'research-create:'+user['id'], service.settings.max_run_requests_per_hour, seconds=3600)
+    result = await service.create_run(request, owner_id=user['id'])
     return result
 
 
@@ -62,6 +65,47 @@ async def cancel_run(run_id: str, service: RunService = Depends(get_run_service)
 @router.get("/runs/{run_id}/events")
 async def run_events(run_id: str, service: RunService = Depends(get_run_service)) -> list[dict[str, Any]]:
     return service.get_events(run_id)
+
+
+@router.get('/runs/{run_id}/events/stream')
+async def stream_run_events(run_id: str, request: Request, after_id: int = Query(default=0, ge=0, le=9223372036854775807), service: RunService = Depends(get_run_service)):
+    try:
+        cursor = max(after_id, int(request.headers.get('Last-Event-ID', '0')))
+        if cursor < 0 or cursor > 9223372036854775807:
+            raise ValueError()
+    except ValueError:
+        raise HTTPException(400, '无效事件游标') from None
+
+    async def stream():
+        nonlocal cursor
+        started = time.monotonic()
+        while time.monotonic() - started < 25:
+            if await request.is_disconnected():
+                return
+            events = service.store.fetch_all('SELECT id,event_type,data_json,created_at FROM events WHERE run_id=? AND id>? ORDER BY id LIMIT 200', (run_id, cursor))
+            for event in events:
+                cursor = event['id']
+                yield f"id: {cursor}\nevent: research.event\ndata: {json.dumps(event, ensure_ascii=False)}\n\n"
+            if not events and service.get_run(run_id)['status'] not in {'PLANNING','APPROVED','RUNNING'}:
+                yield 'event: stream.closed\ndata: {}\n\n'
+                return
+            yield ': heartbeat\n\n'
+            await asyncio.sleep(0.5)
+
+    return StreamingResponse(stream(), media_type='text/event-stream', headers={'Cache-Control':'no-cache, no-transform', 'X-Accel-Buffering':'no'})
+
+
+@router.post('/runs/{run_id}/supplement')
+async def propose_supplement(run_id: str, body: SupplementRequest, service: RunService = Depends(get_run_service)):
+    return service.propose_supplement(run_id, body.expected_updated_at, body.plan_version)
+
+
+@router.get('/runs/{run_id}/review')
+async def research_review(run_id: str, service: RunService = Depends(get_run_service)):
+    from app.services.research_review import review_research
+    run = service.get_run(run_id)
+    return review_research(run['goal'], run['tasks'], service.get_evidence(run_id), service.registry,
+        service.settings.research_data_dir, run['supplement_rounds'], service.settings.max_supplement_rounds)
 
 
 @router.get("/runs/{run_id}/report")
@@ -110,7 +154,7 @@ def delete_thread(thread_id: str, request: Request, service: RunService = Depend
             raise HTTPException(404, '研究不存在或无访问权限')
         if con.execute("SELECT id FROM runs WHERE thread_id=? AND status IN ('PLANNING','RUNNING','APPROVED')", (thread_id,)).fetchone():
             raise HTTPException(409, '请先等待或取消正在执行的任务')
-        for table in ('tool_calls', 'events', 'checkpoints', 'evidence', 'tasks'):
+        for table in ('run_jobs', 'tool_calls', 'events', 'checkpoints', 'evidence', 'tasks'):
             con.execute(f'DELETE FROM {table} WHERE run_id IN (SELECT id FROM runs WHERE thread_id=?)', (thread_id,))
         con.execute('DELETE FROM runs WHERE thread_id=?', (thread_id,))
         con.execute('DELETE FROM memories WHERE thread_id=?', (thread_id,))

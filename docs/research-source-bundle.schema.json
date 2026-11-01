@@ -1,0 +1,332 @@
+{
+  "$defs": {
+    "BalanceRow": {
+      "additionalProperties": false,
+      "properties": {
+        "source": {
+          "format": "uri",
+          "maxLength": 2083,
+          "minLength": 1,
+          "title": "Source",
+          "type": "string"
+        },
+        "as_of": {
+          "format": "date",
+          "title": "As Of",
+          "type": "string"
+        },
+        "basis": {
+          "maxLength": 300,
+          "minLength": 1,
+          "title": "Basis",
+          "type": "string"
+        },
+        "period": {
+          "format": "date",
+          "title": "Period",
+          "type": "string"
+        },
+        "currency": {
+          "const": "CNY",
+          "default": "CNY",
+          "title": "Currency",
+          "type": "string"
+        },
+        "unit": {
+          "const": "元",
+          "default": "元",
+          "title": "Unit",
+          "type": "string"
+        },
+        "total_assets": {
+          "exclusiveMinimum": 0,
+          "title": "Total Assets",
+          "type": "number"
+        },
+        "total_liabilities": {
+          "minimum": 0,
+          "title": "Total Liabilities",
+          "type": "number"
+        },
+        "total_equity": {
+          "title": "Total Equity",
+          "type": "number"
+        }
+      },
+      "required": [
+        "source",
+        "as_of",
+        "basis",
+        "period",
+        "total_assets",
+        "total_liabilities",
+        "total_equity"
+      ],
+      "title": "BalanceRow",
+      "type": "object"
+    },
+    "CashRow": {
+      "additionalProperties": false,
+      "properties": {
+        "source": {
+          "format": "uri",
+          "maxLength": 2083,
+          "minLength": 1,
+          "title": "Source",
+          "type": "string"
+        },
+        "as_of": {
+          "format": "date",
+          "title": "As Of",
+          "type": "string"
+        },
+        "basis": {
+          "maxLength": 300,
+          "minLength": 1,
+          "title": "Basis",
+          "type": "string"
+        },
+        "period": {
+          "format": "date",
+          "title": "Period",
+          "type": "string"
+        },
+        "currency": {
+          "const": "CNY",
+          "default": "CNY",
+          "title": "Currency",
+          "type": "string"
+        },
+        "unit": {
+          "const": "元",
+          "default": "元",
+          "title": "Unit",
+          "type": "string"
+        },
+        "operating_cash_flow": {
+          "title": "Operating Cash Flow",
+          "type": "number"
+        },
+        "investing_cash_flow": {
+          "title": "Investing Cash Flow",
+          "type": "number"
+        },
+        "financing_cash_flow": {
+          "title": "Financing Cash Flow",
+          "type": "number"
+        }
+      },
+      "required": [
+        "source",
+        "as_of",
+        "basis",
+        "period",
+        "operating_cash_flow",
+        "investing_cash_flow",
+        "financing_cash_flow"
+      ],
+      "title": "CashRow",
+      "type": "object"
+    },
+    "FilingRow": {
+      "additionalProperties": false,
+      "properties": {
+        "source": {
+          "format": "uri",
+          "maxLength": 2083,
+          "minLength": 1,
+          "title": "Source",
+          "type": "string"
+        },
+        "as_of": {
+          "format": "date",
+          "title": "As Of",
+          "type": "string"
+        },
+        "basis": {
+          "maxLength": 300,
+          "minLength": 1,
+          "title": "Basis",
+          "type": "string"
+        },
+        "title": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Title",
+          "type": "string"
+        },
+        "page": {
+          "minimum": 1,
+          "title": "Page",
+          "type": "integer"
+        },
+        "text": {
+          "maxLength": 12000,
+          "minLength": 1,
+          "title": "Text",
+          "type": "string"
+        }
+      },
+      "required": [
+        "source",
+        "as_of",
+        "basis",
+        "title",
+        "page",
+        "text"
+      ],
+      "title": "FilingRow",
+      "type": "object"
+    },
+    "PeerRow": {
+      "additionalProperties": false,
+      "properties": {
+        "source": {
+          "format": "uri",
+          "maxLength": 2083,
+          "minLength": 1,
+          "title": "Source",
+          "type": "string"
+        },
+        "as_of": {
+          "format": "date",
+          "title": "As Of",
+          "type": "string"
+        },
+        "basis": {
+          "maxLength": 300,
+          "minLength": 1,
+          "title": "Basis",
+          "type": "string"
+        },
+        "pe_ttm": {
+          "exclusiveMinimum": 0,
+          "title": "Pe Ttm",
+          "type": "number"
+        },
+        "pb_mrq": {
+          "exclusiveMinimum": 0,
+          "title": "Pb Mrq",
+          "type": "number"
+        },
+        "symbol": {
+          "pattern": "^\\d{6}\\.(SH|SZ)$",
+          "title": "Symbol",
+          "type": "string"
+        },
+        "industry": {
+          "maxLength": 100,
+          "minLength": 1,
+          "title": "Industry",
+          "type": "string"
+        }
+      },
+      "required": [
+        "source",
+        "as_of",
+        "basis",
+        "pe_ttm",
+        "pb_mrq",
+        "symbol",
+        "industry"
+      ],
+      "title": "PeerRow",
+      "type": "object"
+    },
+    "ValuationRow": {
+      "additionalProperties": false,
+      "properties": {
+        "source": {
+          "format": "uri",
+          "maxLength": 2083,
+          "minLength": 1,
+          "title": "Source",
+          "type": "string"
+        },
+        "as_of": {
+          "format": "date",
+          "title": "As Of",
+          "type": "string"
+        },
+        "basis": {
+          "maxLength": 300,
+          "minLength": 1,
+          "title": "Basis",
+          "type": "string"
+        },
+        "pe_ttm": {
+          "exclusiveMinimum": 0,
+          "title": "Pe Ttm",
+          "type": "number"
+        },
+        "pb_mrq": {
+          "exclusiveMinimum": 0,
+          "title": "Pb Mrq",
+          "type": "number"
+        }
+      },
+      "required": [
+        "source",
+        "as_of",
+        "basis",
+        "pe_ttm",
+        "pb_mrq"
+      ],
+      "title": "ValuationRow",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "symbol": {
+      "pattern": "^\\d{6}\\.(SH|SZ)$",
+      "title": "Symbol",
+      "type": "string"
+    },
+    "valuation_history": {
+      "items": {
+        "$ref": "#/$defs/ValuationRow"
+      },
+      "maxItems": 2000,
+      "title": "Valuation History",
+      "type": "array"
+    },
+    "peer_valuations": {
+      "items": {
+        "$ref": "#/$defs/PeerRow"
+      },
+      "maxItems": 50,
+      "title": "Peer Valuations",
+      "type": "array"
+    },
+    "balance_sheets": {
+      "items": {
+        "$ref": "#/$defs/BalanceRow"
+      },
+      "maxItems": 20,
+      "title": "Balance Sheets",
+      "type": "array"
+    },
+    "cash_flows": {
+      "items": {
+        "$ref": "#/$defs/CashRow"
+      },
+      "maxItems": 20,
+      "title": "Cash Flows",
+      "type": "array"
+    },
+    "filings": {
+      "items": {
+        "$ref": "#/$defs/FilingRow"
+      },
+      "maxItems": 200,
+      "title": "Filings",
+      "type": "array"
+    }
+  },
+  "required": [
+    "symbol"
+  ],
+  "title": "SourceBundle",
+  "type": "object"
+}

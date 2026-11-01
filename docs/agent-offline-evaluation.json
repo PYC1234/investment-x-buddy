@@ -1,0 +1,211 @@
+{
+  "suite_version": 1,
+  "mode": "OFFLINE_FIXTURE_REPLAY",
+  "created_at": "2026-11-01T03:28:44.093920+00:00",
+  "policy": "Synthetic replay regression; does not establish live model accuracy or user value.",
+  "total": 10,
+  "passed": 10,
+  "pass_rate": 1.0,
+  "results": [
+    {
+      "id": "profitability",
+      "passed": true,
+      "checks": {
+        "expected_clarification": true,
+        "plan_scope": true,
+        "tool_selection": true,
+        "execution_status": true,
+        "budget_respected": true,
+        "valid_citations": true,
+        "limitations_disclosed": true,
+        "report_validation": true
+      },
+      "latency_ms": 1052.58,
+      "usage": {
+        "prompt_tokens": 0,
+        "completion_tokens": 0,
+        "total_tokens": 0,
+        "estimated_cost_usd": null,
+        "cost_status": "NOT_CONFIGURED"
+      }
+    },
+    {
+      "id": "valuation",
+      "passed": true,
+      "checks": {
+        "expected_clarification": true,
+        "plan_scope": true,
+        "tool_selection": true,
+        "execution_status": true,
+        "budget_respected": true,
+        "valid_citations": true,
+        "limitations_disclosed": true,
+        "report_validation": true
+      },
+      "latency_ms": 1140.5,
+      "usage": {
+        "prompt_tokens": 0,
+        "completion_tokens": 0,
+        "total_tokens": 0,
+        "estimated_cost_usd": null,
+        "cost_status": "NOT_CONFIGURED"
+      }
+    },
+    {
+      "id": "risk",
+      "passed": true,
+      "checks": {
+        "expected_clarification": true,
+        "plan_scope": true,
+        "tool_selection": true,
+        "execution_status": true,
+        "budget_respected": true,
+        "valid_citations": true,
+        "limitations_disclosed": true,
+        "report_validation": true
+      },
+      "latency_ms": 1124.7,
+      "usage": {
+        "prompt_tokens": 0,
+        "completion_tokens": 0,
+        "total_tokens": 0,
+        "estimated_cost_usd": null,
+        "cost_status": "NOT_CONFIGURED"
+      }
+    },
+    {
+      "id": "comprehensive",
+      "passed": true,
+      "checks": {
+        "expected_clarification": true,
+        "plan_scope": true,
+        "tool_selection": true,
+        "execution_status": true,
+        "budget_respected": true,
+        "valid_citations": true,
+        "limitations_disclosed": true,
+        "report_validation": true
+      },
+      "latency_ms": 1097.33,
+      "usage": {
+        "prompt_tokens": 0,
+        "completion_tokens": 0,
+        "total_tokens": 0,
+        "estimated_cost_usd": null,
+        "cost_status": "NOT_CONFIGURED"
+      }
+    },
+    {
+      "id": "unknown_stock",
+      "passed": true,
+      "checks": {
+        "expected_clarification": true
+      },
+      "latency_ms": 33.34,
+      "usage": {
+        "total_tokens": 0,
+        "estimated_cost_usd": 0
+      }
+    },
+    {
+      "id": "conflicting_stock",
+      "passed": true,
+      "checks": {
+        "expected_clarification": true
+      },
+      "latency_ms": 30.96,
+      "usage": {
+        "total_tokens": 0,
+        "estimated_cost_usd": 0
+      }
+    },
+    {
+      "id": "failure",
+      "passed": true,
+      "checks": {
+        "expected_clarification": true,
+        "plan_scope": true,
+        "tool_selection": true,
+        "execution_status": true,
+        "budget_respected": true,
+        "valid_citations": true,
+        "limitations_disclosed": true,
+        "report_validation": true
+      },
+      "latency_ms": 849.78,
+      "usage": {
+        "prompt_tokens": 0,
+        "completion_tokens": 0,
+        "total_tokens": 0,
+        "estimated_cost_usd": null,
+        "cost_status": "NOT_CONFIGURED"
+      }
+    },
+    {
+      "id": "missing_data",
+      "passed": true,
+      "checks": {
+        "expected_clarification": true,
+        "plan_scope": true,
+        "tool_selection": true,
+        "execution_status": true,
+        "budget_respected": true,
+        "valid_citations": true,
+        "limitations_disclosed": true,
+        "report_validation": true
+      },
+      "latency_ms": 958.12,
+      "usage": {
+        "prompt_tokens": 0,
+        "completion_tokens": 0,
+        "total_tokens": 0,
+        "estimated_cost_usd": null,
+        "cost_status": "NOT_CONFIGURED"
+      }
+    },
+    {
+      "id": "budget",
+      "passed": true,
+      "checks": {
+        "expected_clarification": true,
+        "plan_scope": true,
+        "tool_selection": true,
+        "execution_status": true,
+        "budget_respected": true,
+        "valid_citations": true,
+        "limitations_disclosed": true,
+        "report_validation": true
+      },
+      "latency_ms": 810.41,
+      "usage": {
+        "prompt_tokens": 0,
+        "completion_tokens": 0,
+        "total_tokens": 0,
+        "estimated_cost_usd": null,
+        "cost_status": "NOT_CONFIGURED"
+      }
+    },
+    {
+      "id": "untrusted_goal",
+      "passed": true,
+      "checks": {
+        "expected_clarification": true,
+        "plan_scope": true,
+        "tool_selection": true,
+        "execution_status": true,
+        "budget_respected": true,
+        "valid_citations": true,
+        "limitations_disclosed": true,
+        "report_validation": true
+      },
+      "latency_ms": 936.6,
+      "usage": {
+        "prompt_tokens": 0,
+        "completion_tokens": 0,
+        "total_tokens": 0,
+        "estimated_cost_usd": null,
+        "cost_status": "NOT_CONFIGURED"
+      }
+    }
+  ]
+}

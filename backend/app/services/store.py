@@ -86,6 +86,24 @@ class SQLiteStore:
             CREATE TABLE IF NOT EXISTS auth_limits(key TEXT PRIMARY KEY, count INTEGER NOT NULL, expires REAL NOT NULL);
             CREATE TABLE IF NOT EXISTS document_history(id TEXT PRIMARY KEY, owner_id TEXT NOT NULL, filename TEXT NOT NULL, result TEXT NOT NULL, created REAL NOT NULL);
             ''')
+            for table, columns in {
+                'runs': {'supplement_rounds': 'INTEGER NOT NULL DEFAULT 0', 'execution_seconds': 'REAL NOT NULL DEFAULT 0'},
+                'tasks': {'task_key': 'TEXT', 'depends_on_json': "TEXT NOT NULL DEFAULT '[]'"},
+            }.items():
+                existing = {row[1] for row in connection.execute(f'PRAGMA table_info({table})')}
+                for name, definition in columns.items():
+                    if name not in existing:
+                        connection.execute(f'ALTER TABLE {table} ADD COLUMN {name} {definition}')
+            connection.executescript('''
+                CREATE TABLE IF NOT EXISTS run_jobs(
+                    run_id TEXT PRIMARY KEY REFERENCES runs(id) ON DELETE CASCADE,
+                    state TEXT NOT NULL, retry_ids_json TEXT,
+                    lease_owner TEXT, lease_until REAL, heartbeat REAL,
+                    created REAL NOT NULL, last_error TEXT
+                );
+                CREATE INDEX IF NOT EXISTS ix_jobs_state ON run_jobs(state, lease_until);
+                CREATE INDEX IF NOT EXISTS ix_events_run ON events(run_id,id);
+            ''')
 
     @staticmethod
     def decode_row(row: sqlite3.Row | None) -> dict[str, Any] | None:
@@ -94,10 +112,11 @@ class SQLiteStore:
         result = dict(row)
         for key in (
             "plan_json", "approval_json", "report_json", "arguments_json",
-            "data_json", "result_json", "state_json", "value_json",
+            "data_json", "result_json", "state_json", "value_json", "depends_on_json", "retry_ids_json",
         ):
-            if key in result and result[key] is not None:
-                result[key.removesuffix("_json")] = json.loads(result.pop(key))
+            if key in result:
+                raw = result.pop(key)
+                result[key.removesuffix("_json")] = json.loads(raw) if raw is not None else None
         if "is_demo" in result:
             result["is_demo"] = bool(result["is_demo"])
         return result

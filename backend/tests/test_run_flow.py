@@ -16,6 +16,8 @@ def build_service(path: Path, **overrides) -> tuple[Settings, RunService]:
     settings = Settings(
         _env_file=None,
         planner_mode="fixture",
+        execution_mode="inline",
+        max_parallel_tools=1,
         sqlite_path=path,
         max_tool_calls=overrides.get("max_tool_calls", 8),
         max_execution_rounds=8,

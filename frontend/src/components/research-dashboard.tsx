@@ -7,6 +7,8 @@ import { ResearchInput } from '@/components/research-input';
 import { useDocumentConversation } from '@/components/document-conversation';
 import { FinancialCharts, FinancialMetrics } from '@/components/financial-charts';
 import { ResearchReport } from '@/components/research-report';
+import { ResearchReview } from '@/components/research-review';
+import { consumeResearchEvents } from '@/lib/research-stream';
 import { ResearchPlan } from '@/components/research-plan';
 import { ExecutionTrace } from '@/components/execution-trace';
 import { AgentMonitor } from '@/components/agent-monitor';
@@ -35,6 +37,7 @@ export function ResearchDashboard() {
   const [preferences, setPreferences] = useState<Preferences>({ horizon: '3–5 年', risk: '中等', evidence: true });
   const pollInFlight = useRef(false);
   const restored = useRef(false);
+  const eventCursors = useRef<Record<string, number>>({});
 
   useEffect(() => {
     if (mode !== 'api') return;
@@ -100,7 +103,17 @@ export function ResearchDashboard() {
       try { await refreshRun(active.remoteRunId!, active.id, controller.signal); } finally { pollInFlight.current = false; }
     };
     const timer = window.setInterval(() => void tick(), 1500);
-    return () => { window.clearInterval(timer); controller.abort(); pollInFlight.current = false; };
+    let reconnect: ReturnType<typeof setTimeout> | undefined;
+    const connect = () => {
+      void consumeResearchEvents(active.remoteRunId!, eventCursors.current[active.remoteRunId!] ?? 0, controller.signal, cursor => {
+        eventCursors.current[active.remoteRunId!] = cursor;
+        void tick();
+      }).catch(() => { /* Polling remains available while streaming reconnects. */ }).finally(() => {
+        if (!controller.signal.aborted) reconnect = setTimeout(connect, 3000);
+      });
+    };
+    connect();
+    return () => { window.clearInterval(timer); clearTimeout(reconnect); controller.abort(); pollInFlight.current = false; };
   }, [active.apiStatus, active.id, active.remoteRunId, mode, refreshRun]);
 
   const dispatch = async (type: Exclude<RunAction['type'], 'START'>) => {
@@ -178,6 +191,7 @@ export function ResearchDashboard() {
         <ResearchInput thread={active} goal={goal} setGoal={setGoal} onStart={start} documentMode={documents.hasDocuments} busy={documents.busy}>{documents.controls}</ResearchInput>
         <nav className="tabs" aria-label="工作区标签">{([['Research', BarChart3], ['Plan', ListChecks], ['Trace', ScrollText]] as const).filter(([tab])=>!documents.hasDocuments||tab==='Research').map(([tab, Icon]) => <button key={tab} data-testid={`tab-${tab.toLowerCase()}`} className={(documents.hasDocuments||active.tab === tab) ? 'active' : ''} onClick={() => setTab(tab)}><Icon />{documents.hasDocuments?'资料对话':tab}{tab === 'Plan' && active.status === 'approval' && <span className="tab-alert">1</span>}</button>)}</nav>
         <div className="tab-content">
+          {mode === 'api' && !documents.hasDocuments && <ResearchReview thread={active} onRefresh={() => active.remoteRunId ? refreshRun(active.remoteRunId, active.id) : Promise.resolve()} />}
           {(active.tab === 'Research'||documents.hasDocuments) && <>{documents.messages}{!documents.hasDocuments&&<><FinancialMetrics data={data} state={active.loading ? 'loading' : data ? 'ready' : 'empty'} /><FinancialCharts data={data} state={active.loading ? 'loading' : data ? 'ready' : 'empty'} /><ResearchReport thread={active} data={data} onEvidence={setEvidenceId} mode={mode} /></>}</>}
           {!documents.hasDocuments&&active.tab === 'Plan' && <ResearchPlan thread={active} expanded={expanded} setExpanded={setExpanded} onAction={dispatch} mode={mode} />}
           {!documents.hasDocuments&&active.tab === 'Trace' && <ExecutionTrace thread={active} />}

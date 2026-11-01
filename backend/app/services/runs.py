@@ -9,11 +9,11 @@ import httpx
 
 from app.core.config import Settings, get_settings
 from app.core.errors import AppError
-from app.schemas.research import ApprovalRequest, CreateRunRequest, RejectRequest, RetryFailedRequest
+from app.schemas.research import ApprovalRequest, CreateRunRequest, RejectRequest, RetryFailedRequest, ResearchPlan
 from app.services.planner import DeepSeekPlanner, FixturePlanner, Planner
 from app.services.store import SQLiteStore
 from app.services.evidence_quality import assess_evidence
-from app.services.symbols import SymbolResolutionError
+from app.services.symbols import SymbolResolutionError, resolve_symbol
 from app.services.tools import ToolExecutionError, ToolRegistry, build_tool_registry
 
 
@@ -40,32 +40,40 @@ class RunService:
             raise AppError(status_code=404, code="run_not_found", message="Run not found.")
         return run
 
-    async def create_run(self, request: CreateRunRequest) -> dict[str, Any]:
+    async def create_run(self, request: CreateRunRequest, owner_id: str | None = None) -> dict[str, Any]:
         timestamp = now_iso()
         thread_id = request.thread_id or str(uuid4())
-        if request.thread_id:
-            if not self.store.fetch_one("SELECT * FROM threads WHERE id=?", (thread_id,)):
-                raise AppError(status_code=404, code="thread_not_found", message="Thread not found.")
-        else:
-            self.store.execute(
-                "INSERT INTO threads(id,title,created_at,updated_at) VALUES(?,?,?,?)",
-                (thread_id, request.thread_title or request.goal[:100], timestamp, timestamp),
-            )
-        if request.preferences:
-            self.save_memory(thread_id, "research_preferences", request.preferences)
-
         run_id = str(uuid4())
-        self.store.execute(
+        with self.store.connection() as con:
+            con.execute('BEGIN IMMEDIATE')
+            if owner_id:
+                active = con.execute("SELECT COUNT(*) FROM runs r JOIN threads t ON t.id=r.thread_id WHERE t.owner_id=? AND r.status IN ('PLANNING','PENDING_APPROVAL','APPROVED','RUNNING')", (owner_id,)).fetchone()[0]
+                if active >= self.settings.max_active_runs_per_user:
+                    raise AppError(status_code=429, code='active_run_limit', message='待确认或执行中的研究过多，请先完成、拒绝或停止已有研究。')
+            if request.thread_id:
+                row = con.execute('SELECT owner_id FROM threads WHERE id=?', (thread_id,)).fetchone()
+                if row is None or (owner_id is not None and row['owner_id'] != owner_id):
+                    raise AppError(status_code=404, code='thread_not_found', message='Thread not found.')
+            else:
+                con.execute('INSERT INTO threads(id,title,created_at,updated_at,owner_id) VALUES(?,?,?,?,?)',
+                    (thread_id, request.thread_title or request.goal[:100], timestamp, timestamp, owner_id))
+            con.execute(
             """INSERT INTO runs(id,thread_id,goal,status,plan_version,planner_mode,created_at,updated_at)
                VALUES(?,?,?,?,?,?,?,?)""",
             (run_id, thread_id, request.goal, "PLANNING", 1, self.settings.planner_mode, timestamp, timestamp),
-        )
+            )
+        if request.preferences:
+            self.save_memory(thread_id, "research_preferences", request.preferences)
         self._event(run_id, "run.created", {"status": "PLANNING"})
         preferences = self.get_memory(thread_id).get("research_preferences", {})
         try:
             result = await self.planner.plan(request.goal, preferences)
             for task in result.plan.tasks:
                 self.registry.validate(task.tool_name, task.arguments)
+            symbol = resolve_symbol(request.goal)
+            for task in result.plan.tasks:
+                if task.arguments.get('symbol') != symbol:
+                    raise ValueError('Plan stock does not match the confirmed research goal')
         except SymbolResolutionError as exc:
             self.store.execute("UPDATE runs SET status='FAILED',error=?,updated_at=? WHERE id=?", (str(exc), now_iso(), run_id))
             self._event(run_id, "plan.invalid", {"error": str(exc)})
@@ -88,9 +96,9 @@ class RunService:
         )
         for position, task in enumerate(result.plan.tasks, start=1):
             self.store.execute(
-                """INSERT INTO tasks(id,run_id,plan_version,position,title,tool_name,arguments_json,rationale,status,created_at,updated_at)
-                   VALUES(?,?,?,?,?,?,?,?,?,?,?)""",
-                (str(uuid4()), run_id, 1, position, task.title, task.tool_name, json.dumps(task.arguments, ensure_ascii=False), task.rationale, "PENDING", timestamp, timestamp),
+                """INSERT INTO tasks(id,run_id,plan_version,position,title,tool_name,arguments_json,rationale,status,created_at,updated_at,task_key,depends_on_json)
+                   VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                (str(uuid4()), run_id, 1, position, task.title, task.tool_name, json.dumps(task.arguments, ensure_ascii=False), task.rationale, "PENDING", timestamp, timestamp, task.task_key, json.dumps(task.depends_on)),
             )
         self._event(run_id, "plan.generated", {"plan_version": 1, "planner_mode": result.mode, "tool_names": [task.tool_name for task in result.plan.tasks]})
         self._save_checkpoint(run_id, "PENDING_APPROVAL")
@@ -129,9 +137,14 @@ class RunService:
         if not required.issubset(requested):
             raise AppError(status_code=400, code="approval_scope_incomplete", message="Approval tool scope does not cover the plan.")
         approval_data = {"plan_version": approval.plan_version, "allowed_tools": sorted(requested), "approved_at": now_iso()}
-        self.store.execute("UPDATE runs SET status='APPROVED',approval_json=?,updated_at=? WHERE id=?", (json.dumps(approval_data), now_iso(), run_id))
+        from app.services.jobs import enqueue
+        with self.store.connection() as con:
+            changed = con.execute("UPDATE runs SET status='APPROVED',approval_json=?,updated_at=? WHERE id=? AND status='PENDING_APPROVAL' AND plan_version=?", (json.dumps(approval_data), now_iso(), run_id, approval.plan_version))
+            if changed.rowcount != 1:
+                raise AppError(status_code=409, code='approval_state_changed', message='研究已被其他请求更新。')
+            enqueue(con, run_id)
         self._event(run_id, "plan.approved", approval_data)
-        return await self.execute(run_id)
+        return await self._dispatch(run_id)
 
     def reject(self, run_id: str, rejection: RejectRequest) -> dict[str, Any]:
         run = self._run_or_404(run_id)
@@ -142,83 +155,70 @@ class RunService:
         self._save_checkpoint(run_id, "REJECTED")
         return self.get_run(run_id)
 
-    async def execute(self, run_id: str, retry_task_ids: set[str] | None = None) -> dict[str, Any]:
-        run = self._run_or_404(run_id)
-        approval = run.get("approval")
-        if not approval or approval.get("plan_version") != run["plan_version"]:
-            raise AppError(status_code=409, code="approval_required", message="A matching plan approval is required before execution.")
-        if run["status"] in {"REJECTED", "CANCELLED", "PENDING_APPROVAL", "PLANNING"}:
-            raise AppError(status_code=409, code="execution_not_allowed", message="Run cannot execute in its current state.")
-        self.store.execute("UPDATE runs SET status='RUNNING',started_at=COALESCE(started_at,?),updated_at=? WHERE id=?", (now_iso(), now_iso(), run_id))
-        self._event(run_id, "execution.started", {"resumed": run["status"] in {"PARTIAL", "FAILED", "RUNNING"}})
-        started = time.monotonic()
-        rounds = 0
-        calls = len(self.store.fetch_all("SELECT id FROM tool_calls WHERE run_id=?", (run_id,)))
-        stop_reason: str | None = None
-        tasks = self.store.fetch_all("SELECT * FROM tasks WHERE run_id=? ORDER BY position", (run_id,))
-        for task in tasks:
-            if retry_task_ids is not None and task["id"] not in retry_task_ids:
-                continue
-            if task["status"] == "COMPLETED" or (task["status"] == "FAILED" and retry_task_ids is None):
-                continue
-            latest = self._run_or_404(run_id)
-            if latest["status"] == "CANCELLED":
-                stop_reason = "cancelled"
-                break
-            if rounds >= self.settings.max_execution_rounds:
-                stop_reason = "max_execution_rounds"
-                break
-            if calls >= self.settings.max_tool_calls:
-                stop_reason = "max_tool_calls"
-                break
-            if time.monotonic() - started >= self.settings.run_timeout_seconds:
-                stop_reason = "run_timeout"
-                break
-            if task["tool_name"] not in approval["allowed_tools"] or task["tool_name"] not in self.registry.names():
-                self._fail_task(task, "Tool is outside the approved registry scope.")
-                continue
-            try:
-                validated = self.registry.validate(task["tool_name"], task["arguments"])
-            except ValueError as exc:
-                self._fail_task(task, str(exc))
-                continue
-            rounds += 1
-            max_attempts = task["attempts"] + 1 if retry_task_ids is not None else self.settings.max_tool_retries + 1
-            while task["attempts"] < max_attempts and calls < self.settings.max_tool_calls:
-                attempt = task["attempts"] + 1
-                task["attempts"] = attempt
-                calls += 1
-                self.store.execute("UPDATE tasks SET status='RUNNING',attempts=?,updated_at=? WHERE id=?", (attempt, now_iso(), task["id"]))
-                call_started = time.perf_counter()
-                try:
-                    result, _ = self.registry.execute(task["tool_name"], validated)
-                    if result.get("is_demo") is False:
-                        result["quality"] = assess_evidence(task["tool_name"], result, task["arguments"]["symbol"])
-                    duration = (time.perf_counter() - call_started) * 1000
-                    evidence_id = f"EVD-{uuid4().hex[:12].upper()}"
-                    self.store.execute("INSERT INTO evidence(id,run_id,task_id,tool_name,title,data_json,is_demo,created_at) VALUES(?,?,?,?,?,?,?,?)", (evidence_id, run_id, task["id"], task["tool_name"], task["title"], json.dumps(result, ensure_ascii=False), int(result.get("is_demo", True)), now_iso()))
-                    self._record_tool_call(run_id, task, attempt, "SUCCESS", duration, result, None)
-                    self.store.execute("UPDATE tasks SET status='COMPLETED',evidence_id=?,error=NULL,updated_at=? WHERE id=?", (evidence_id, now_iso(), task["id"]))
-                    self._event(run_id, "tool.completed", {"task_id": task["id"], "tool_name": task["tool_name"], "evidence_id": evidence_id, "duration_ms": round(duration, 3)})
-                    if result.get("quality"):
-                        self._event(run_id, "evidence.quality_checked", {"evidence_id": evidence_id, **result["quality"]})
-                    break
-                except ToolExecutionError as exc:
-                    duration = (time.perf_counter() - call_started) * 1000
-                    self._record_tool_call(run_id, task, attempt, "ERROR", duration, None, str(exc))
-                    self._event(run_id, "tool.failed", {"task_id": task["id"], "tool_name": task["tool_name"], "attempt": attempt, "error": str(exc)})
-                    if attempt >= max_attempts:
-                        self._fail_task(task, str(exc))
-            self._save_checkpoint(run_id, "RUNNING")
+    async def execute(self, run_id: str, retry_task_ids: set[str] | None = None, lease_token: str | None = None) -> dict[str, Any]:
+        if lease_token is None:
+            raise AppError(status_code=409, code="worker_lease_required", message="Execution must be claimed by a worker.")
+        from app.services.executor import execute
+        return await execute(self, run_id, retry_task_ids, lease_token)
 
-        current_tasks = self.store.fetch_all("SELECT * FROM tasks WHERE run_id=? ORDER BY position", (run_id,))
-        failed = [task for task in current_tasks if task["status"] != "COMPLETED"]
-        quality_failed = any(item["data"].get("quality", {}).get("usable") is False for item in self.get_evidence(run_id))
-        final_status = "PARTIAL" if failed or stop_reason or quality_failed else "COMPLETE"
-        report = self._build_report(run_id, final_status, stop_reason)
-        self.store.execute("UPDATE runs SET status=?,report_json=?,error=?,updated_at=?,completed_at=? WHERE id=?", (final_status, json.dumps(report, ensure_ascii=False), stop_reason, now_iso(), now_iso(), run_id))
-        self._event(run_id, "run.completed", {"status": final_status, "stop_reason": stop_reason})
-        self._save_checkpoint(run_id, final_status)
+    async def _dispatch(self, run_id: str) -> dict[str, Any]:
+        if self.settings.execution_mode == 'inline':
+            from app.services.jobs import process_one
+            await process_one(self, run_id)
+        return self.get_run(run_id)
+
+    def finish_report(self, run_id, status, stop_reason):
+        from app.services.research_review import review_research
+        from app.services.report_validation import attach_validation
+        run = self.get_run(run_id)
+        evidence = self.get_evidence(run_id)
+        report = self._build_report(run_id, status, stop_reason)
+        report['research_review'] = review_research(run['goal'], run['tasks'], evidence, self.registry,
+            self.settings.research_data_dir, run['supplement_rounds'], self.settings.max_supplement_rounds)
+        report['coverage_status'] = report['research_review']['coverage_status']
+        supplemental = {e['tool_name'] for e in evidence if e['data'].get('dataset') and e['data'].get('quality', {}).get('usable', True)}
+        if supplemental:
+            labels = sorted({e['data'].get('data_label', 'DEMO DATA' if e['is_demo'] else 'UNSPECIFIED SOURCE') for e in evidence})
+            report['data_notice'] = ' · '.join(labels) + '；各条证据来源与时点独立；演示样本不得用作真实判断。'
+            report['missing_information'] = [message for message in report['missing_information']
+                if not any(text in message for text in ('缺少历史估值区间、同业比较及完整财务报表', 'PB 为 MRQ 口径；本接口不提供', '利润表不提供 ROE；未取得资产负债表与现金流量表'))]
+            report['missing_information'].append('导入资料仅覆盖提供的样本；仍需人工核验来源、可比性、新鲜度和覆盖完整性，不计算目标价。')
+            if {'get_valuation_history','get_peer_valuations'} <= supplemental:
+                for finding in report['findings']:
+                    finding['statement'] = finding['statement'].replace('缺少同业和历史区间，不能单凭倍数认定低估或高估。', '另有导入历史与同业样本；样本完整性及可比性尚未独立核验，不能单凭倍数认定低估或高估。')
+        report['missing_information'].extend(report['research_review']['missing_evidence'])
+        return attach_validation(report, evidence)
+
+    def propose_supplement(self, run_id, expected_updated_at, plan_version):
+        run = self.get_run(run_id)
+        if run['status'] not in {'COMPLETE', 'PARTIAL'} or run['updated_at'] != expected_updated_at or run['plan_version'] != plan_version:
+            raise AppError(status_code=409, code='supplement_state_changed', message='研究状态已变化，请刷新后重试。')
+        if len(self.get_tool_calls(run_id)) >= self.settings.max_tool_calls or run['execution_seconds'] >= self.settings.run_timeout_seconds:
+            return run
+        from app.services.research_review import review_research
+        review = review_research(run['goal'], run['tasks'], self.get_evidence(run_id), self.registry,
+            self.settings.research_data_dir, run['supplement_rounds'], self.settings.max_supplement_rounds)
+        proposed = review['proposed_tasks']
+        if not proposed:
+            return run
+        data = dict(run['plan'])
+        data['tasks'] = [*data['tasks'], *proposed]
+        data['scope'] = [*data.get('scope', []), *(t['title'] for t in proposed)]
+        plan = ResearchPlan.model_validate(data)
+        for task in plan.tasks:
+            self.registry.validate(task.tool_name, task.arguments)
+        timestamp, version = now_iso(), plan_version + 1
+        with self.store.connection() as con:
+            con.execute('BEGIN IMMEDIATE')
+            changed = con.execute("UPDATE runs SET status='PENDING_APPROVAL',plan_version=?,plan_json=?,approval_json=NULL,supplement_rounds=supplement_rounds+1,updated_at=?,completed_at=NULL WHERE id=? AND updated_at=? AND plan_version=? AND status IN ('COMPLETE','PARTIAL')",
+                (version, json.dumps(plan.model_dump(), ensure_ascii=False), timestamp, run_id, expected_updated_at, plan_version))
+            if changed.rowcount != 1:
+                raise AppError(status_code=409, code='supplement_state_changed', message='研究已被其他请求更新。')
+            con.execute('UPDATE tasks SET plan_version=? WHERE run_id=?', (version, run_id))
+            for position, task in enumerate(plan.tasks[len(run['tasks']):], len(run['tasks']) + 1):
+                con.execute("INSERT INTO tasks(id,run_id,plan_version,position,title,tool_name,arguments_json,rationale,status,created_at,updated_at,task_key,depends_on_json) VALUES(?,?,?,?,?,?,?,?,'PENDING',?,?,?,?)",
+                    (str(uuid4()), run_id, version, position, task.title, task.tool_name, json.dumps(task.arguments, ensure_ascii=False), task.rationale, timestamp, timestamp, task.task_key, json.dumps(task.depends_on)))
+        self._event(run_id, 'plan.supplement_proposed', {'plan_version': version, 'new_tasks': proposed, 'approval_required': True})
         return self.get_run(run_id)
 
     def _record_tool_call(self, run_id: str, task: dict[str, Any], attempt: int, status: str, duration: float, result: dict[str, Any] | None, error: str | None) -> None:
@@ -252,6 +252,12 @@ class RunService:
                     continue
                 if item["is_demo"]:
                     statement = "DEMO DATA：此条为演示证据，不可用于真实结论。"
+                elif data.get('dataset'):
+                    count = len(data.get('records', []))
+                    statement = f"导入公开资料：{item['title']}，取得 {count} 条带来源与口径的记录。仅覆盖导入样本，尚未独立交叉核验。"
+                    if data.get('statistics'):
+                        stats = data['statistics']
+                        statement += f"样本 PE(TTM) 区间 {stats['min_pe_ttm']:.2f}–{stats['max_pe_ttm']:.2f} 倍；不代表全历史区间。"
                 elif "snapshot" in data:
                     row = data["snapshot"]
                     statement = f"扶摇行情快照：价格 {number(row.get('price_cny'))} 元，涨跌幅 {number(row.get('change_percent'))}%。取得 {len(data.get('prices', []))} 条前复权日线。接口时间（北京时间）{datetime.fromtimestamp(data['timestamp_ms']/1000, timezone(timedelta(hours=8))).strftime('%Y-%m-%d %H:%M:%S') if isinstance(data.get('timestamp_ms'), (int, float)) else '未提供'}；接口时间不保证等于最新成交时间。"
@@ -367,9 +373,10 @@ class RunService:
             connection.execute("INSERT INTO events(run_id,event_type,data_json,created_at) VALUES(?,?,?,?)", (run_id, "run.retry_requested", json.dumps({"task_ids": [task["id"] for task in failed], "plan_version": run["plan_version"], "attempts_per_task": 1}, ensure_ascii=False), timestamp))
             if run.get("report"):
                 connection.execute("INSERT INTO events(run_id,event_type,data_json,created_at) VALUES(?,?,?,?)", (run_id, "report.archived", json.dumps({"reason": "retry_failed", "report": run["report"]}, ensure_ascii=False), timestamp))
+            from app.services.jobs import enqueue
+            enqueue(connection, run_id, {task['id'] for task in failed})
         self._save_checkpoint(run_id, "APPROVED")
-        result = await self.execute(run_id, retry_task_ids={task["id"] for task in failed})
-        self._event(run_id, "run.retry_completed", {"status": result["status"], "task_ids": [task["id"] for task in failed]})
+        result = await self._dispatch(run_id)
         return result
 
     async def resume(self, run_id: str) -> dict[str, Any]:
@@ -378,15 +385,32 @@ class RunService:
             return self.get_run(run_id)
         if run["status"] not in {"APPROVED", "RUNNING", "PARTIAL", "FAILED"}:
             raise AppError(status_code=409, code="resume_not_allowed", message="Run cannot be resumed in its current state.")
-        self.store.execute("UPDATE tasks SET status='PENDING',updated_at=? WHERE run_id=? AND status='RUNNING'", (now_iso(), run_id))
+        from app.services.jobs import enqueue
+        with self.store.connection() as con:
+            con.execute('BEGIN IMMEDIATE')
+            active = con.execute("SELECT state,lease_until FROM run_jobs WHERE run_id=?", (run_id,)).fetchone()
+            if active and active['state'] in {'QUEUED','RUNNING'}:
+                return self.get_run(run_id)
+            if not run.get('approval') or run['approval']['plan_version'] != run['plan_version']:
+                raise AppError(status_code=409, code='approval_required', message='A matching approval is required.')
+            con.execute("UPDATE tasks SET status='PENDING' WHERE run_id=? AND status IN ('RUNNING','BLOCKED')", (run_id,))
+            con.execute("UPDATE runs SET status='APPROVED',updated_at=? WHERE id=?", (now_iso(), run_id))
+            enqueue(con, run_id)
         self._event(run_id, "run.resumed", {"checkpoint_loaded": bool(self.get_checkpoints(run_id))})
-        return await self.execute(run_id)
+        return await self._dispatch(run_id)
 
     def cancel(self, run_id: str) -> dict[str, Any]:
         run = self._run_or_404(run_id)
         if run["status"] in {"COMPLETE", "REJECTED", "CANCELLED"}:
             raise AppError(status_code=409, code="cancel_not_allowed", message="Run is already terminal.")
-        self.store.execute("UPDATE runs SET status='CANCELLED',updated_at=?,completed_at=? WHERE id=?", (now_iso(), now_iso(), run_id))
+        with self.store.connection() as con:
+            con.execute('BEGIN IMMEDIATE')
+            changed = con.execute("UPDATE runs SET status='CANCELLED',updated_at=?,completed_at=? WHERE id=? AND status NOT IN ('COMPLETE','REJECTED','CANCELLED')", (now_iso(), now_iso(), run_id))
+            if changed.rowcount != 1:
+                raise AppError(status_code=409, code='cancel_not_allowed', message='Run is already terminal.')
+            con.execute("UPDATE run_jobs SET state='CANCELLED',lease_until=NULL WHERE run_id=?", (run_id,))
+            con.execute("UPDATE tasks SET status='CANCELLED',error='Cancelled by user',updated_at=? WHERE run_id=? AND status IN ('PENDING','RUNNING','BLOCKED')", (now_iso(), run_id))
+            con.execute("UPDATE tool_calls SET status='CANCELLED',error='Cancelled; late read-only response will not be committed' WHERE run_id=? AND status='STARTED'", (run_id,))
         self._event(run_id, "run.cancelled", {})
         self._save_checkpoint(run_id, "CANCELLED")
         return self.get_run(run_id)
@@ -433,11 +457,16 @@ class RunService:
         return self.registry.schemas()
 
 
-@lru_cache
-def get_run_service() -> RunService:
-    settings = get_settings()
+def build_run_service(settings: Settings) -> RunService:
     from app.services.fuyao import build_fuyao_registry
     registry = build_fuyao_registry(settings.fuyao_api_key) if settings.finance_provider_configured else build_tool_registry()
+    from app.services.research_sources import register_source_tools
+    register_source_tools(registry, settings.research_data_dir)
     planner: Planner = FixturePlanner() if settings.planner_mode == "fixture" else DeepSeekPlanner(settings, registry)
     return RunService(settings, SQLiteStore(settings.sqlite_path), registry, planner)
+
+
+@lru_cache
+def get_run_service() -> RunService:
+    return build_run_service(get_settings())
 

@@ -63,15 +63,15 @@ SQLite 演示建议单实例、单 Uvicorn worker；多实例会产生文件锁�
 |---|---|
 | Base directory | `frontend` |
 | Build command | `npm run build` |
-| Publish directory | `.next` |
+| Publish directory | `out` |
 | Node.js | `24` |
 
-Netlify 使用 OpenNext 自动适配 Next.js，不需要安装或固定 `@netlify/plugin-nextjs`。按以下步骤发布：
+当前使用 Next.js 静态导出，`next.config.ts` 配置 `output: "export"`。构建后发布 `out/`，不发布 `.next` 缓存目录。按以下步骤发布：
 
 1. 登录 Netlify，选择 **Add new project → Import an existing project**。
 2. 选择 GitHub 并授权 Netlify 读取 `PYC1234/investment-x-buddy`。
 3. 选择仓库的默认生产分支。Netlify 如自动识别 `frontend`，仍检查最终设置是否与上表一致。
-4. Framework 保持 Next.js；不要添加 Functions directory、额外插件或静态导出命令。
+4. 保持仓库静态导出设置，不添加 Functions directory 或额外适配插件。
 5. Render 尚未上线时，不创建 `NEXT_PUBLIC_API_BASE_URL`，直接选择 **Deploy**。部署结果应显示应用自身的 Demo Mode 标识。
 6. 部署完成后，可在 **Project configuration → Domain management** 修改免费的 `*.netlify.app` 站点名；记下最终生产 Origin。
 
@@ -115,7 +115,7 @@ Render 上线后切换真实 API：
 | `DEEPSEEK_INPUT_COST_PER_1M` | 否 | 未配置时成本状态为 `NOT_CONFIGURED` |
 | `DEEPSEEK_OUTPUT_COST_PER_1M` | 否 | 同上 |
 
-`FUYAO_API_KEY`、`DATABASE_URL` 已在配置类中保留，但当前执行路径未使用，不应因为变量存在就宣称已接通。
+`FUYAO_API_KEY` 已用于真实行情、利润表和估值快照工具；未配置时使用明确标记的 Fixture。`DATABASE_URL` 尚未替代 SQLite。新增后台执行、SSE、资料工具与存储要求见 [Agent 升级说明](AGENT-UPGRADE.md)。
 
 ## 6. CORS 验收
 

@@ -33,7 +33,7 @@ class Settings(BaseSettings):
     )
 
     service_name: str = "investment-x-buddy-api"
-    version: str = "0.1.1"
+    version: str = "0.2.0"
     api_v1_prefix: str = "/api/v1"
     demo_mode: bool = True
     cors_origins: list[str] = Field(
@@ -67,6 +67,15 @@ class Settings(BaseSettings):
     max_execution_rounds: int = Field(default=8, validation_alias="MAX_EXECUTION_ROUNDS")
     run_timeout_seconds: float = Field(default=30.0, validation_alias="RUN_TIMEOUT_SECONDS")
     max_tool_retries: int = Field(default=1, validation_alias="MAX_TOOL_RETRIES")
+    execution_mode: Literal["queued", "inline"] = "queued"
+    worker_enabled: bool = True
+    worker_poll_seconds: float = Field(default=0.5, ge=0.1, le=30)
+    worker_lease_seconds: float = Field(default=30, ge=5, le=300)
+    max_parallel_tools: int = Field(default=3, ge=1, le=8)
+    max_supplement_rounds: int = Field(default=2, ge=0, le=3)
+    research_data_dir: Path = BACKEND_ROOT / "data" / "research_sources"
+    max_active_runs_per_user: int = Field(default=3, ge=1, le=20)
+    max_run_requests_per_hour: int = Field(default=30, ge=1, le=1000)
     deepseek_input_cost_per_1m: float | None = Field(
         default=None, validation_alias="DEEPSEEK_INPUT_COST_PER_1M"
     )
