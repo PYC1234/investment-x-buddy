@@ -33,7 +33,7 @@ async def answer(payload: ChatRequest, analyses: list[dict], settings: Settings)
             parts.append(f"- {field['field']}：{field['value']} [{prefix}:{field['evidence_id']}]")
         for evidence in analysis['evidence']:
             sources.append({**evidence, 'id': f'{prefix}:{evidence["id"]}', 'filename': analysis['filename']})
-    parts.append('\n未启用 AI 问答：以上为规则统计和字段提取。下方提供与问题相关的原文；需要语义解释或连续追问，请勾选 AI 问答。不同文件的期间和口径尚未自动对齐，不直接合并排名。')
+    parts.append('\n以上为规则统计和字段提取，下方提供与问题相关的原文。' + ('AI 问答暂未成功，未生成语义回答。' if payload.use_model else '需要语义解释或连续追问，请勾选 AI 问答。') + '不同文件的期间和口径尚未自动对齐，不直接合并排名。')
     result = {'answer': '\n'.join(parts), 'sources': sources, 'analyses': analyses,
               'model_status': 'not_requested', 'warnings': [], 'question': payload.question}
     if not payload.use_model:
