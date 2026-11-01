@@ -62,10 +62,24 @@ async def answer(payload: ChatRequest, analyses: list[dict], settings: Settings)
                 json={'model': settings.deepseek_model, 'messages': messages, 'temperature': 0, 'max_tokens': 1300})
             response.raise_for_status()
             content = response.json()['choices'][0]['message']['content']
-        citations = re.findall(r'\[(D\d+:[PR][\d-]+)\]', content)
         allowed = {s['id'] for s in included}
-        if not isinstance(content, str) or not content.strip() or not citations or any(c not in allowed for c in citations):
+        if not isinstance(content, str) or not content.strip():
+            raise ValueError('Empty model response')
+        citations = re.findall(r'\[(D\d+:[^\]\r\n]+)\]', content)
+        if not citations:
             raise ValueError('Missing or invalid evidence references')
+        for citation in citations:
+            if citation in allowed:
+                continue
+            # Some models shorten CSV row citations to [D1:R2-R4]. Expand only
+            # when every row in that small range is among this turn's sources.
+            span = re.fullmatch(r'(D\d+:)R(\d+)-R?(\d+)', citation)
+            if not span or not 0 <= int(span[3])-int(span[2]) <= 20:
+                raise ValueError('Invalid evidence reference')
+            expanded = [f'{span[1]}R{row}' for row in range(int(span[2]), int(span[3])+1)]
+            if any(ref not in allowed for ref in expanded):
+                raise ValueError('Evidence range includes omitted rows')
+            content = content.replace(f'[{citation}]', ''.join(f'[{ref}]' for ref in expanded))
         result['answer'] = content
         result['model_status'] = 'generated_needs_review'
     except Exception:

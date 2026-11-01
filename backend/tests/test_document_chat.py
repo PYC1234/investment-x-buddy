@@ -46,7 +46,7 @@ async def test_chat_saved_only_to_own_account(client):
 
 
 @pytest.mark.anyio
-@pytest.mark.parametrize('citation,expected', [('D1:R2','generated_needs_review'), ('D2:R999','failed')])
+@pytest.mark.parametrize('citation,expected', [('D1:R2','generated_needs_review'), ('D2:R999','failed'), ('D1:R2-R3','generated_needs_review'), ('D1:R2-R999','failed'), ('D1:R2-R4','failed')])
 async def test_model_receives_followup_history_and_validates_file_citations(monkeypatch, citation, expected):
     original=httpx.AsyncClient
     received=[]
@@ -64,6 +64,8 @@ async def test_model_receives_followup_history_and_validates_file_citations(monk
     assert received[0]['messages'][1]['content']=='比较产品费用'
     assert '那第二个呢？' in received[0]['messages'][-1]['content']
     assert '[D1:R2]' in received[0]['messages'][-1]['content']
+    if citation == 'D1:R2-R3':
+        assert '[D1:R2][D1:R3]' in result['answer']
     if expected=='failed':assert '规则' in result['answer'] and result['warnings']
 
 
