@@ -9,7 +9,9 @@ export interface ResearchEvidence { id: string; title: string; type: string; per
 export interface ResearchFinding { task: string; statement: string; evidenceIds: string[] }
 export interface ResearchReviewData { coverage_status: string; missing_evidence: string[]; next_action: string; supplement_rounds: number; max_supplement_rounds: number; policy: string }
 export interface ReportValidation { status: string; checked_claims: number; semantic_verification: string; policy: string; issues: string[] }
-export interface ResearchReportData { title: string; status: string; qualityStatus?: string; dataNotice: string; executiveSummary: string; findings: ResearchFinding[]; missingInformation: string[]; evidenceIds: string[]; review?: ResearchReviewData; validation?: ReportValidation }
+export interface AnnualScope { symbol: string; fiscal_year: number }
+export interface AnnualAnswer { label: string; status: 'SUPPORTED' | 'MISSING_DATA' | 'MISSING_COMPARISON' | 'DIRECT_EXCERPT' | 'MISSING_EXPLANATION'; evidence_ids: string[]; excerpt_refs?: Array<{ evidence_id: string; record_index: number }> }
+export interface ResearchReportData { annualAnswers?: AnnualAnswer[]; title: string; status: string; qualityStatus?: string; dataNotice: string; executiveSummary: string; findings: ResearchFinding[]; missingInformation: string[]; evidenceIds: string[]; review?: ResearchReviewData; validation?: ReportValidation }
 export interface ToolCall { id: string; toolName: string; attempt: number; status: string; durationMs: number; error: string | null }
 export interface ToolDefinition { name: string; description: string; permission: string; parameters?: Record<string, unknown> }
 export interface ResearchThread {

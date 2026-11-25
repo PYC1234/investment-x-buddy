@@ -58,7 +58,19 @@ class ResearchPlan(BaseModel):
         return self
 
 
+class AnnualScope(BaseModel):
+    symbol: str = Field(pattern=r"^\d{6}\.(SH|SZ)$")
+    fiscal_year: int = Field(ge=2020, le=2030)
+
+    @field_validator("symbol")
+    @classmethod
+    def supported_exchange(cls, symbol):
+        from app.services.symbols import resolve_symbol
+        return resolve_symbol(symbol)
+
+
 class CreateRunRequest(BaseModel):
+    annual_scope: AnnualScope | None = None
     goal: str = Field(min_length=3, max_length=1000)
     thread_id: str | None = None
     thread_title: str | None = Field(default=None, max_length=200)

@@ -34,7 +34,8 @@ class DeepSeekPlanner:
         symbol = resolve_symbol(goal)
         sources = available_sources(self.settings.research_data_dir, symbol)
         tool_specs = [item for item in self.registry.schemas()
-                      if item['name'] not in SUPPLEMENT_TOOLS or item['name'] in sources]
+                      if item['name'] != 'read_uploaded_annual_report'
+                      and (item['name'] not in SUPPLEMENT_TOOLS or item['name'] in sources)]
         instruction = (
             "Create a bounded investment research plan. Use only supplied tools and their actual data coverage. "
             "Return one JSON object matching the schema; use topologically ordered task_key/depends_on. "

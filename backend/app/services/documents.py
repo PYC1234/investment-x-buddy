@@ -26,7 +26,7 @@ class DocumentRequest(BaseModel):
     question: str = Field(default='', max_length=1000)
 
 
-def extract(request: DocumentRequest) -> dict:
+def extract(request: DocumentRequest, *, annual_pages: bool = False) -> dict:
     started = time.perf_counter()
     try:
         raw = base64.b64decode(request.content_base64, validate=True)
@@ -91,7 +91,10 @@ def extract(request: DocumentRequest) -> dict:
             reader = PdfReader(io.BytesIO(raw))
             if reader.is_encrypted:
                 raise HTTPException(422, '暂不支持加密PDF')
-            if not 1 <= len(reader.pages) <= 30:
+            page_limit = 350 if annual_pages else 30
+            if annual_pages and not 1 <= len(reader.pages) <= page_limit:
+                raise HTTPException(422, '年报 PDF 须为 1–350 页')
+            if not 1 <= len(reader.pages) <= page_limit:
                 raise HTTPException(422, '基础版支持1–30页文字型PDF')
             total = 0
             for number, page in enumerate(reader.pages, 1):
@@ -100,14 +103,17 @@ def extract(request: DocumentRequest) -> dict:
                     raise HTTPException(413, 'PDF页面内容过大，请拆分文件')
                 content = page.extract_text() or ''
                 total += len(content)
-                if total > 150000:
+                if total > (1500000 if annual_pages else 150000):
                     raise HTTPException(413, 'PDF文字超过15万字，请拆分文件')
-                for offset in range(0, len(content), 1000):
+                stride = 850 if annual_pages else 1000
+                for offset in range(0, len(content), stride):
                     chunk = content[offset:offset+1000].strip()
                     if chunk:
-                        evidence.append({'id': f'P{number}-{offset//1000+1}', 'location': f'第{number}页', 'text': chunk})
+                        evidence.append({'id': f'P{number}-{offset//stride+1}', 'location': f'第{number}页', 'text': chunk})
             if not evidence:
                 raise HTTPException(422, '未提取到文字：可能是扫描件，请先OCR或上传文字版PDF')
+            if annual_pages:
+                return {'filename': name, 'sha256': hashlib.sha256(raw).hexdigest(), 'pages': evidence}
             overview = f'读取{len(reader.pages)}页、{total}字符；按页保留原文证据。'
             warnings.append('PDF表格可能发生错行，本版不自动还原财务表格；数字和表格需对照原文复核。')
         except HTTPException:

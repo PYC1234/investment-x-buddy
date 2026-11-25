@@ -1,0 +1,754 @@
+[
+  {
+    "id": "train-revenue",
+    "symbol": "600519.SH",
+    "year": 2025,
+    "topic": "revenue",
+    "question": "请根据给定资料解释该公司2025财年的营收变化。",
+    "evidence": [
+      {
+        "id": "E1",
+        "text": "营业收入增长，主要是直营渠道拓展。",
+        "symbol": "600519.SH",
+        "year": 2025,
+        "title": "变动分析"
+      }
+    ],
+    "gold": "E1",
+    "rejected": "营收增长主要是提价。",
+    "error_type": "混淆渠道与价格",
+    "rationale": "仅允许引用同标的、同财年、同指标的直接归因。"
+  },
+  {
+    "id": "train-profit",
+    "symbol": "600519.SH",
+    "year": 2025,
+    "topic": "profit",
+    "question": "请根据给定资料解释该公司2025财年的利润变化。",
+    "evidence": [
+      {
+        "id": "E1",
+        "text": "归母净利润下降，主要由于设备减值。",
+        "symbol": "600519.SH",
+        "year": 2025,
+        "title": "变动分析"
+      }
+    ],
+    "gold": "E1",
+    "rejected": "利润下降是因为订单减少。",
+    "error_type": "归因与原文冲突",
+    "rationale": "仅允许引用同标的、同财年、同指标的直接归因。"
+  },
+  {
+    "id": "train-table",
+    "symbol": "600519.SH",
+    "year": 2025,
+    "topic": "revenue",
+    "question": "请根据给定资料解释该公司2025财年的营收变化。",
+    "evidence": [
+      {
+        "id": "E1",
+        "text": "营业收入同比下降 13%。",
+        "symbol": "600519.SH",
+        "year": 2025,
+        "title": "变动分析"
+      }
+    ],
+    "gold": null,
+    "rejected": "下降原因是出口需求减少。",
+    "error_type": "数字不能证明因果",
+    "rationale": "仅允许引用同标的、同财年、同指标的直接归因。"
+  },
+  {
+    "id": "train-cross",
+    "symbol": "600519.SH",
+    "year": 2025,
+    "topic": "profit",
+    "question": "请根据给定资料解释该公司2025财年的利润变化。",
+    "evidence": [
+      {
+        "id": "E1",
+        "text": "营业收入下降，主要受到产量减少影响。",
+        "symbol": "600519.SH",
+        "year": 2025,
+        "title": "变动分析"
+      }
+    ],
+    "gold": null,
+    "rejected": "利润变动是产量减少造成的。",
+    "error_type": "营收证据不能解释利润",
+    "rationale": "仅允许引用同标的、同财年、同指标的直接归因。"
+  },
+  {
+    "id": "train-v2-1-direct_revenue",
+    "symbol": "600519.SH",
+    "year": 2022,
+    "topic": "revenue",
+    "question": "根据所给资料，解释 600519.SH 2022 财年的营业收入为何变化，并引用可核对的依据。",
+    "evidence": [
+      {
+        "id": "E1",
+        "text": "营业收入上涨，主要是社区门店新增。",
+        "symbol": "600519.SH",
+        "year": 2022,
+        "title": "主营业务分析"
+      },
+      {
+        "id": "E2",
+        "text": "600519.SH 本年度披露了内部控制流程及董事会构成。",
+        "symbol": "600519.SH",
+        "year": 2022,
+        "title": "经营概况"
+      }
+    ],
+    "gold": "E1",
+    "rejected": "现有资料不足以判断营收变化原因。",
+    "error_type": "direct_revenue",
+    "rationale": "存在直接解释，过度留空属于未回答。",
+    "stratum": "direct_revenue"
+  },
+  {
+    "id": "train-v2-1-direct_profit",
+    "symbol": "600519.SH",
+    "year": 2022,
+    "topic": "profit",
+    "question": "根据所给资料，解释 600519.SH 2022 财年的归母净利润为何变化，并引用可核对的依据。",
+    "evidence": [
+      {
+        "id": "E1",
+        "text": "归母净利润下降，主要由于渠道退货增加。",
+        "symbol": "600519.SH",
+        "year": 2022,
+        "title": "主营业务分析"
+      },
+      {
+        "id": "E2",
+        "text": "600519.SH 本年度披露了内部控制流程及董事会构成。",
+        "symbol": "600519.SH",
+        "year": 2022,
+        "title": "经营概况"
+      }
+    ],
+    "gold": "E1",
+    "rejected": "归母净利润下降主要是销量萎缩。",
+    "error_type": "direct_profit",
+    "rationale": "销量萎缩没有证据，应引用同期间的直接解释。",
+    "stratum": "direct_profit"
+  },
+  {
+    "id": "train-v2-1-numeric_only",
+    "symbol": "600519.SH",
+    "year": 2022,
+    "topic": "revenue",
+    "question": "根据所给资料，解释 600519.SH 2022 财年的营业收入为何变化，并引用可核对的依据。",
+    "evidence": [
+      {
+        "id": "E1",
+        "text": "该年度营业收入较上年减少 16%，分部数字见附表。",
+        "symbol": "600519.SH",
+        "year": 2022,
+        "title": "主营业务分析"
+      },
+      {
+        "id": "E2",
+        "text": "600519.SH 本年度披露了内部控制流程及董事会构成。",
+        "symbol": "600519.SH",
+        "year": 2022,
+        "title": "经营概况"
+      }
+    ],
+    "gold": null,
+    "rejected": "营收下滑是因为海外需求走弱。",
+    "error_type": "numeric_only",
+    "rationale": "会计数字仅证明变化方向及幅度。",
+    "stratum": "numeric_only"
+  },
+  {
+    "id": "train-v2-1-cross_metric",
+    "symbol": "600519.SH",
+    "year": 2022,
+    "topic": "profit",
+    "question": "根据所给资料，解释 600519.SH 2022 财年的归母净利润为何变化，并引用可核对的依据。",
+    "evidence": [
+      {
+        "id": "E1",
+        "text": "营业收入增加，主要系社区门店新增，归母净利润另见报表。",
+        "symbol": "600519.SH",
+        "year": 2022,
+        "title": "主营业务分析"
+      },
+      {
+        "id": "E2",
+        "text": "600519.SH 本年度披露了内部控制流程及董事会构成。",
+        "symbol": "600519.SH",
+        "year": 2022,
+        "title": "经营概况"
+      }
+    ],
+    "gold": null,
+    "rejected": "利润变化归因于社区门店新增。",
+    "error_type": "cross_metric",
+    "rationale": "营收归因不能移用于利润。",
+    "stratum": "cross_metric"
+  },
+  {
+    "id": "train-v2-2-direct_revenue",
+    "symbol": "300750.SZ",
+    "year": 2023,
+    "topic": "revenue",
+    "question": "根据所给资料，解释 300750.SZ 2023 财年的营业收入为何变化，并引用可核对的依据。",
+    "evidence": [
+      {
+        "id": "E1",
+        "text": "营业收入上涨，主要是运费下降。",
+        "symbol": "300750.SZ",
+        "year": 2023,
+        "title": "主营业务分析"
+      },
+      {
+        "id": "E2",
+        "text": "300750.SZ 本年度披露了内部控制流程及董事会构成。",
+        "symbol": "300750.SZ",
+        "year": 2023,
+        "title": "经营概况"
+      }
+    ],
+    "gold": "E1",
+    "rejected": "现有资料不足以判断营收变化原因。",
+    "error_type": "direct_revenue",
+    "rationale": "存在直接解释，过度留空属于未回答。",
+    "stratum": "direct_revenue"
+  },
+  {
+    "id": "train-v2-2-direct_profit",
+    "symbol": "300750.SZ",
+    "year": 2023,
+    "topic": "profit",
+    "question": "根据所给资料，解释 300750.SZ 2023 财年的归母净利润为何变化，并引用可核对的依据。",
+    "evidence": [
+      {
+        "id": "E1",
+        "text": "归母净利润下降，主要由于上游采购成本提高。",
+        "symbol": "300750.SZ",
+        "year": 2023,
+        "title": "主营业务分析"
+      },
+      {
+        "id": "E2",
+        "text": "300750.SZ 本年度披露了内部控制流程及董事会构成。",
+        "symbol": "300750.SZ",
+        "year": 2023,
+        "title": "经营概况"
+      }
+    ],
+    "gold": "E1",
+    "rejected": "归母净利润下降主要是销量萎缩。",
+    "error_type": "direct_profit",
+    "rationale": "销量萎缩没有证据，应引用同期间的直接解释。",
+    "stratum": "direct_profit"
+  },
+  {
+    "id": "train-v2-2-numeric_only",
+    "symbol": "300750.SZ",
+    "year": 2023,
+    "topic": "revenue",
+    "question": "根据所给资料，解释 300750.SZ 2023 财年的营业收入为何变化，并引用可核对的依据。",
+    "evidence": [
+      {
+        "id": "E1",
+        "text": "该年度营业收入较上年减少 17%，分部数字见附表。",
+        "symbol": "300750.SZ",
+        "year": 2023,
+        "title": "主营业务分析"
+      },
+      {
+        "id": "E2",
+        "text": "300750.SZ 本年度披露了内部控制流程及董事会构成。",
+        "symbol": "300750.SZ",
+        "year": 2023,
+        "title": "经营概况"
+      }
+    ],
+    "gold": null,
+    "rejected": "营收下滑是因为海外需求走弱。",
+    "error_type": "numeric_only",
+    "rationale": "会计数字仅证明变化方向及幅度。",
+    "stratum": "numeric_only"
+  },
+  {
+    "id": "train-v2-2-cross_metric",
+    "symbol": "300750.SZ",
+    "year": 2023,
+    "topic": "profit",
+    "question": "根据所给资料，解释 300750.SZ 2023 财年的归母净利润为何变化，并引用可核对的依据。",
+    "evidence": [
+      {
+        "id": "E1",
+        "text": "营业收入增加，主要系运费下降，归母净利润另见报表。",
+        "symbol": "300750.SZ",
+        "year": 2023,
+        "title": "主营业务分析"
+      },
+      {
+        "id": "E2",
+        "text": "300750.SZ 本年度披露了内部控制流程及董事会构成。",
+        "symbol": "300750.SZ",
+        "year": 2023,
+        "title": "经营概况"
+      }
+    ],
+    "gold": null,
+    "rejected": "利润变化归因于运费下降。",
+    "error_type": "cross_metric",
+    "rationale": "营收归因不能移用于利润。",
+    "stratum": "cross_metric"
+  },
+  {
+    "id": "train-v2-3-direct_revenue",
+    "symbol": "000858.SZ",
+    "year": 2024,
+    "topic": "revenue",
+    "question": "根据所给资料，解释 000858.SZ 2024 财年的营业收入为何变化，并引用可核对的依据。",
+    "evidence": [
+      {
+        "id": "E1",
+        "text": "营业收入上涨，主要是批发渠道补库存。",
+        "symbol": "000858.SZ",
+        "year": 2024,
+        "title": "主营业务分析"
+      },
+      {
+        "id": "E2",
+        "text": "000858.SZ 本年度披露了内部控制流程及董事会构成。",
+        "symbol": "000858.SZ",
+        "year": 2024,
+        "title": "经营概况"
+      }
+    ],
+    "gold": "E1",
+    "rejected": "现有资料不足以判断营收变化原因。",
+    "error_type": "direct_revenue",
+    "rationale": "存在直接解释，过度留空属于未回答。",
+    "stratum": "direct_revenue"
+  },
+  {
+    "id": "train-v2-3-direct_profit",
+    "symbol": "000858.SZ",
+    "year": 2024,
+    "topic": "profit",
+    "question": "根据所给资料，解释 000858.SZ 2024 财年的归母净利润为何变化，并引用可核对的依据。",
+    "evidence": [
+      {
+        "id": "E1",
+        "text": "归母净利润下降，主要由于广告投放增加。",
+        "symbol": "000858.SZ",
+        "year": 2024,
+        "title": "主营业务分析"
+      },
+      {
+        "id": "E2",
+        "text": "000858.SZ 本年度披露了内部控制流程及董事会构成。",
+        "symbol": "000858.SZ",
+        "year": 2024,
+        "title": "经营概况"
+      }
+    ],
+    "gold": "E1",
+    "rejected": "归母净利润下降主要是销量萎缩。",
+    "error_type": "direct_profit",
+    "rationale": "销量萎缩没有证据，应引用同期间的直接解释。",
+    "stratum": "direct_profit"
+  },
+  {
+    "id": "train-v2-3-numeric_only",
+    "symbol": "000858.SZ",
+    "year": 2024,
+    "topic": "revenue",
+    "question": "根据所给资料，解释 000858.SZ 2024 财年的营业收入为何变化，并引用可核对的依据。",
+    "evidence": [
+      {
+        "id": "E1",
+        "text": "该年度营业收入较上年减少 18%，分部数字见附表。",
+        "symbol": "000858.SZ",
+        "year": 2024,
+        "title": "主营业务分析"
+      },
+      {
+        "id": "E2",
+        "text": "000858.SZ 本年度披露了内部控制流程及董事会构成。",
+        "symbol": "000858.SZ",
+        "year": 2024,
+        "title": "经营概况"
+      }
+    ],
+    "gold": null,
+    "rejected": "营收下滑是因为海外需求走弱。",
+    "error_type": "numeric_only",
+    "rationale": "会计数字仅证明变化方向及幅度。",
+    "stratum": "numeric_only"
+  },
+  {
+    "id": "train-v2-3-cross_metric",
+    "symbol": "000858.SZ",
+    "year": 2024,
+    "topic": "profit",
+    "question": "根据所给资料，解释 000858.SZ 2024 财年的归母净利润为何变化，并引用可核对的依据。",
+    "evidence": [
+      {
+        "id": "E1",
+        "text": "营业收入增加，主要系批发渠道补库存，归母净利润另见报表。",
+        "symbol": "000858.SZ",
+        "year": 2024,
+        "title": "主营业务分析"
+      },
+      {
+        "id": "E2",
+        "text": "000858.SZ 本年度披露了内部控制流程及董事会构成。",
+        "symbol": "000858.SZ",
+        "year": 2024,
+        "title": "经营概况"
+      }
+    ],
+    "gold": null,
+    "rejected": "利润变化归因于批发渠道补库存。",
+    "error_type": "cross_metric",
+    "rationale": "营收归因不能移用于利润。",
+    "stratum": "cross_metric"
+  },
+  {
+    "id": "train-v2-4-direct_revenue",
+    "symbol": "600036.SH",
+    "year": 2025,
+    "topic": "revenue",
+    "question": "根据所给资料，解释 600036.SH 2025 财年的营业收入为何变化，并引用可核对的依据。",
+    "evidence": [
+      {
+        "id": "E1",
+        "text": "营业收入上涨，主要是手续费收入增加。",
+        "symbol": "600036.SH",
+        "year": 2025,
+        "title": "主营业务分析"
+      },
+      {
+        "id": "E2",
+        "text": "600036.SH 本年度披露了内部控制流程及董事会构成。",
+        "symbol": "600036.SH",
+        "year": 2025,
+        "title": "经营概况"
+      }
+    ],
+    "gold": "E1",
+    "rejected": "现有资料不足以判断营收变化原因。",
+    "error_type": "direct_revenue",
+    "rationale": "存在直接解释，过度留空属于未回答。",
+    "stratum": "direct_revenue"
+  },
+  {
+    "id": "train-v2-4-direct_profit",
+    "symbol": "600036.SH",
+    "year": 2025,
+    "topic": "profit",
+    "question": "根据所给资料，解释 600036.SH 2025 财年的归母净利润为何变化，并引用可核对的依据。",
+    "evidence": [
+      {
+        "id": "E1",
+        "text": "归母净利润下降，主要由于信用减值增加。",
+        "symbol": "600036.SH",
+        "year": 2025,
+        "title": "主营业务分析"
+      },
+      {
+        "id": "E2",
+        "text": "600036.SH 本年度披露了内部控制流程及董事会构成。",
+        "symbol": "600036.SH",
+        "year": 2025,
+        "title": "经营概况"
+      }
+    ],
+    "gold": "E1",
+    "rejected": "归母净利润下降主要是销量萎缩。",
+    "error_type": "direct_profit",
+    "rationale": "销量萎缩没有证据，应引用同期间的直接解释。",
+    "stratum": "direct_profit"
+  },
+  {
+    "id": "train-v2-4-numeric_only",
+    "symbol": "600036.SH",
+    "year": 2025,
+    "topic": "revenue",
+    "question": "根据所给资料，解释 600036.SH 2025 财年的营业收入为何变化，并引用可核对的依据。",
+    "evidence": [
+      {
+        "id": "E1",
+        "text": "该年度营业收入较上年减少 19%，分部数字见附表。",
+        "symbol": "600036.SH",
+        "year": 2025,
+        "title": "主营业务分析"
+      },
+      {
+        "id": "E2",
+        "text": "600036.SH 本年度披露了内部控制流程及董事会构成。",
+        "symbol": "600036.SH",
+        "year": 2025,
+        "title": "经营概况"
+      }
+    ],
+    "gold": null,
+    "rejected": "营收下滑是因为海外需求走弱。",
+    "error_type": "numeric_only",
+    "rationale": "会计数字仅证明变化方向及幅度。",
+    "stratum": "numeric_only"
+  },
+  {
+    "id": "train-v2-4-cross_metric",
+    "symbol": "600036.SH",
+    "year": 2025,
+    "topic": "profit",
+    "question": "根据所给资料，解释 600036.SH 2025 财年的归母净利润为何变化，并引用可核对的依据。",
+    "evidence": [
+      {
+        "id": "E1",
+        "text": "营业收入增加，主要系手续费收入增加，归母净利润另见报表。",
+        "symbol": "600036.SH",
+        "year": 2025,
+        "title": "主营业务分析"
+      },
+      {
+        "id": "E2",
+        "text": "600036.SH 本年度披露了内部控制流程及董事会构成。",
+        "symbol": "600036.SH",
+        "year": 2025,
+        "title": "经营概况"
+      }
+    ],
+    "gold": null,
+    "rejected": "利润变化归因于手续费收入增加。",
+    "error_type": "cross_metric",
+    "rationale": "营收归因不能移用于利润。",
+    "stratum": "cross_metric"
+  },
+  {
+    "id": "train-v2-5-direct_revenue",
+    "symbol": "601318.SH",
+    "year": 2024,
+    "topic": "revenue",
+    "question": "根据所给资料，解释 601318.SH 2024 财年的营业收入为何变化，并引用可核对的依据。",
+    "evidence": [
+      {
+        "id": "E1",
+        "text": "营业收入上涨，主要是服务合同续签。",
+        "symbol": "601318.SH",
+        "year": 2024,
+        "title": "主营业务分析"
+      },
+      {
+        "id": "E2",
+        "text": "601318.SH 本年度披露了内部控制流程及董事会构成。",
+        "symbol": "601318.SH",
+        "year": 2024,
+        "title": "经营概况"
+      }
+    ],
+    "gold": "E1",
+    "rejected": "现有资料不足以判断营收变化原因。",
+    "error_type": "direct_revenue",
+    "rationale": "存在直接解释，过度留空属于未回答。",
+    "stratum": "direct_revenue"
+  },
+  {
+    "id": "train-v2-5-direct_profit",
+    "symbol": "601318.SH",
+    "year": 2024,
+    "topic": "profit",
+    "question": "根据所给资料，解释 601318.SH 2024 财年的归母净利润为何变化，并引用可核对的依据。",
+    "evidence": [
+      {
+        "id": "E1",
+        "text": "归母净利润下降，主要由于系统改造费用增加。",
+        "symbol": "601318.SH",
+        "year": 2024,
+        "title": "主营业务分析"
+      },
+      {
+        "id": "E2",
+        "text": "601318.SH 本年度披露了内部控制流程及董事会构成。",
+        "symbol": "601318.SH",
+        "year": 2024,
+        "title": "经营概况"
+      }
+    ],
+    "gold": "E1",
+    "rejected": "归母净利润下降主要是销量萎缩。",
+    "error_type": "direct_profit",
+    "rationale": "销量萎缩没有证据，应引用同期间的直接解释。",
+    "stratum": "direct_profit"
+  },
+  {
+    "id": "train-v2-5-numeric_only",
+    "symbol": "601318.SH",
+    "year": 2024,
+    "topic": "revenue",
+    "question": "根据所给资料，解释 601318.SH 2024 财年的营业收入为何变化，并引用可核对的依据。",
+    "evidence": [
+      {
+        "id": "E1",
+        "text": "该年度营业收入较上年减少 20%，分部数字见附表。",
+        "symbol": "601318.SH",
+        "year": 2024,
+        "title": "主营业务分析"
+      },
+      {
+        "id": "E2",
+        "text": "601318.SH 本年度披露了内部控制流程及董事会构成。",
+        "symbol": "601318.SH",
+        "year": 2024,
+        "title": "经营概况"
+      }
+    ],
+    "gold": null,
+    "rejected": "营收下滑是因为海外需求走弱。",
+    "error_type": "numeric_only",
+    "rationale": "会计数字仅证明变化方向及幅度。",
+    "stratum": "numeric_only"
+  },
+  {
+    "id": "train-v2-5-cross_metric",
+    "symbol": "601318.SH",
+    "year": 2024,
+    "topic": "profit",
+    "question": "根据所给资料，解释 601318.SH 2024 财年的归母净利润为何变化，并引用可核对的依据。",
+    "evidence": [
+      {
+        "id": "E1",
+        "text": "营业收入增加，主要系服务合同续签，归母净利润另见报表。",
+        "symbol": "601318.SH",
+        "year": 2024,
+        "title": "主营业务分析"
+      },
+      {
+        "id": "E2",
+        "text": "601318.SH 本年度披露了内部控制流程及董事会构成。",
+        "symbol": "601318.SH",
+        "year": 2024,
+        "title": "经营概况"
+      }
+    ],
+    "gold": null,
+    "rejected": "利润变化归因于服务合同续签。",
+    "error_type": "cross_metric",
+    "rationale": "营收归因不能移用于利润。",
+    "stratum": "cross_metric"
+  },
+  {
+    "id": "train-v2-6-direct_revenue",
+    "symbol": "000001.SZ",
+    "year": 2023,
+    "topic": "revenue",
+    "question": "根据所给资料，解释 000001.SZ 2023 财年的营业收入为何变化，并引用可核对的依据。",
+    "evidence": [
+      {
+        "id": "E1",
+        "text": "营业收入上涨，主要是对公客户数量上升。",
+        "symbol": "000001.SZ",
+        "year": 2023,
+        "title": "主营业务分析"
+      },
+      {
+        "id": "E2",
+        "text": "000001.SZ 本年度披露了内部控制流程及董事会构成。",
+        "symbol": "000001.SZ",
+        "year": 2023,
+        "title": "经营概况"
+      }
+    ],
+    "gold": "E1",
+    "rejected": "现有资料不足以判断营收变化原因。",
+    "error_type": "direct_revenue",
+    "rationale": "存在直接解释，过度留空属于未回答。",
+    "stratum": "direct_revenue"
+  },
+  {
+    "id": "train-v2-6-direct_profit",
+    "symbol": "000001.SZ",
+    "year": 2023,
+    "topic": "profit",
+    "question": "根据所给资料，解释 000001.SZ 2023 财年的归母净利润为何变化，并引用可核对的依据。",
+    "evidence": [
+      {
+        "id": "E1",
+        "text": "归母净利润下降，主要由于一次性重组费用增加。",
+        "symbol": "000001.SZ",
+        "year": 2023,
+        "title": "主营业务分析"
+      },
+      {
+        "id": "E2",
+        "text": "000001.SZ 本年度披露了内部控制流程及董事会构成。",
+        "symbol": "000001.SZ",
+        "year": 2023,
+        "title": "经营概况"
+      }
+    ],
+    "gold": "E1",
+    "rejected": "归母净利润下降主要是销量萎缩。",
+    "error_type": "direct_profit",
+    "rationale": "销量萎缩没有证据，应引用同期间的直接解释。",
+    "stratum": "direct_profit"
+  },
+  {
+    "id": "train-v2-6-numeric_only",
+    "symbol": "000001.SZ",
+    "year": 2023,
+    "topic": "revenue",
+    "question": "根据所给资料，解释 000001.SZ 2023 财年的营业收入为何变化，并引用可核对的依据。",
+    "evidence": [
+      {
+        "id": "E1",
+        "text": "该年度营业收入较上年减少 21%，分部数字见附表。",
+        "symbol": "000001.SZ",
+        "year": 2023,
+        "title": "主营业务分析"
+      },
+      {
+        "id": "E2",
+        "text": "000001.SZ 本年度披露了内部控制流程及董事会构成。",
+        "symbol": "000001.SZ",
+        "year": 2023,
+        "title": "经营概况"
+      }
+    ],
+    "gold": null,
+    "rejected": "营收下滑是因为海外需求走弱。",
+    "error_type": "numeric_only",
+    "rationale": "会计数字仅证明变化方向及幅度。",
+    "stratum": "numeric_only"
+  },
+  {
+    "id": "train-v2-6-cross_metric",
+    "symbol": "000001.SZ",
+    "year": 2023,
+    "topic": "profit",
+    "question": "根据所给资料，解释 000001.SZ 2023 财年的归母净利润为何变化，并引用可核对的依据。",
+    "evidence": [
+      {
+        "id": "E1",
+        "text": "营业收入增加，主要系对公客户数量上升，归母净利润另见报表。",
+        "symbol": "000001.SZ",
+        "year": 2023,
+        "title": "主营业务分析"
+      },
+      {
+        "id": "E2",
+        "text": "000001.SZ 本年度披露了内部控制流程及董事会构成。",
+        "symbol": "000001.SZ",
+        "year": 2023,
+        "title": "经营概况"
+      }
+    ],
+    "gold": null,
+    "rejected": "利润变化归因于对公客户数量上升。",
+    "error_type": "cross_metric",
+    "rationale": "营收归因不能移用于利润。",
+    "stratum": "cross_metric"
+  }
+]

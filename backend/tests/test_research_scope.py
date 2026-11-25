@@ -31,12 +31,15 @@ async def test_profitability_scope_is_approved_and_reported(monkeypatch, tmp_pat
         run = (await client.post("/api/v1/runs", json={"goal": "分析贵州茅台盈利能力"})).json()
         assert run["status"] == "PENDING_APPROVAL" and not calls
         assert run["plan"]["research_type"] == "profitability"
-        assert len(run["tasks"]) == 1
-        r = await client.post(f"/api/v1/runs/{run['id']}/approve", json={"plan_version": 1, "allowed_tools": ["get_financial_summary"]})
+        planned = ["get_financial_summary", "get_fuyao_cash_flow", "get_fuyao_balance_sheet"]
+        assert [task["tool_name"] for task in run["tasks"]] == planned
+        r = await client.post(f"/api/v1/runs/{run['id']}/approve", json={"plan_version": 1, "allowed_tools": planned})
         assert r.json()["status"] == "COMPLETE"
-        assert len(calls) == 1
+        assert len(calls) == 3
         report = service.get_report(run["id"])
         assert "盈利能力初步研究" in report["title"]
         assert "利润表" in report["executive_summary"]
         assert "估值快照" not in report["executive_summary"]
-        assert len(report["evidence_ids"]) == 1
+        assert len(report["evidence_ids"]) == 3
+        assert report["coverage_status"] == "SCOPED_EVIDENCE_COLLECTED"
+        assert "经营活动现金流量净额 4.50 亿元" in str(report)

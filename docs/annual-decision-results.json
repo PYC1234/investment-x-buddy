@@ -1,0 +1,577 @@
+{
+  "constructed_regression": {
+    "summary": {
+      "answerable": 8,
+      "unanswerable": 8,
+      "before": {
+        "supported": 6,
+        "correct_abstention": 8,
+        "unsupported": 0
+      },
+      "after": {
+        "supported": 8,
+        "correct_abstention": 8,
+        "unsupported": 0
+      }
+    },
+    "cases": [
+      {
+        "id": "check-revenue",
+        "topic": "revenue",
+        "gold": [
+          "H1"
+        ],
+        "fixed_order": [
+          "H1"
+        ],
+        "before": {
+          "selected": [
+            "H1"
+          ],
+          "unsupported": [],
+          "supported": true,
+          "abstained": false
+        },
+        "after": {
+          "selected": [
+            "H1"
+          ],
+          "unsupported": [],
+          "supported": true,
+          "abstained": false
+        }
+      },
+      {
+        "id": "check-profit",
+        "topic": "profit",
+        "gold": [
+          "H1"
+        ],
+        "fixed_order": [
+          "H1"
+        ],
+        "before": {
+          "selected": [
+            "H1"
+          ],
+          "unsupported": [],
+          "supported": true,
+          "abstained": false
+        },
+        "after": {
+          "selected": [
+            "H1"
+          ],
+          "unsupported": [],
+          "supported": true,
+          "abstained": false
+        }
+      },
+      {
+        "id": "check-numbers",
+        "topic": "revenue",
+        "gold": [],
+        "fixed_order": [
+          "H1"
+        ],
+        "before": {
+          "selected": [],
+          "unsupported": [],
+          "supported": false,
+          "abstained": true
+        },
+        "after": {
+          "selected": [],
+          "unsupported": [],
+          "supported": false,
+          "abstained": true
+        }
+      },
+      {
+        "id": "check-metric",
+        "topic": "profit",
+        "gold": [],
+        "fixed_order": [],
+        "before": {
+          "selected": [],
+          "unsupported": [],
+          "supported": false,
+          "abstained": true
+        },
+        "after": {
+          "selected": [],
+          "unsupported": [],
+          "supported": false,
+          "abstained": true
+        }
+      },
+      {
+        "id": "check-v2-1",
+        "topic": "revenue",
+        "gold": [
+          "H1"
+        ],
+        "fixed_order": [
+          "H1",
+          "N0",
+          "N1"
+        ],
+        "before": {
+          "selected": [
+            "H1"
+          ],
+          "unsupported": [],
+          "supported": true,
+          "abstained": false
+        },
+        "after": {
+          "selected": [
+            "H1"
+          ],
+          "unsupported": [],
+          "supported": true,
+          "abstained": false
+        }
+      },
+      {
+        "id": "check-v2-2",
+        "topic": "profit",
+        "gold": [
+          "H1"
+        ],
+        "fixed_order": [
+          "H1",
+          "N0",
+          "N1"
+        ],
+        "before": {
+          "selected": [
+            "H1"
+          ],
+          "unsupported": [],
+          "supported": true,
+          "abstained": false
+        },
+        "after": {
+          "selected": [
+            "H1"
+          ],
+          "unsupported": [],
+          "supported": true,
+          "abstained": false
+        }
+      },
+      {
+        "id": "check-v2-3",
+        "topic": "revenue",
+        "gold": [
+          "H1"
+        ],
+        "fixed_order": [
+          "H1",
+          "N0",
+          "N1"
+        ],
+        "before": {
+          "selected": [
+            "H1"
+          ],
+          "unsupported": [],
+          "supported": true,
+          "abstained": false
+        },
+        "after": {
+          "selected": [
+            "H1"
+          ],
+          "unsupported": [],
+          "supported": true,
+          "abstained": false
+        }
+      },
+      {
+        "id": "check-v2-4",
+        "topic": "profit",
+        "gold": [
+          "H1"
+        ],
+        "fixed_order": [
+          "H1",
+          "N0",
+          "N1"
+        ],
+        "before": {
+          "selected": [
+            "H1"
+          ],
+          "unsupported": [],
+          "supported": true,
+          "abstained": false
+        },
+        "after": {
+          "selected": [
+            "H1"
+          ],
+          "unsupported": [],
+          "supported": true,
+          "abstained": false
+        }
+      },
+      {
+        "id": "check-v2-5",
+        "topic": "revenue",
+        "gold": [
+          "H1"
+        ],
+        "fixed_order": [
+          "H1",
+          "N0",
+          "N1"
+        ],
+        "before": {
+          "selected": [],
+          "unsupported": [],
+          "supported": false,
+          "abstained": false
+        },
+        "after": {
+          "selected": [
+            "H1"
+          ],
+          "unsupported": [],
+          "supported": true,
+          "abstained": false
+        }
+      },
+      {
+        "id": "check-v2-6",
+        "topic": "profit",
+        "gold": [
+          "H1"
+        ],
+        "fixed_order": [
+          "H1",
+          "N0",
+          "N1"
+        ],
+        "before": {
+          "selected": [],
+          "unsupported": [],
+          "supported": false,
+          "abstained": false
+        },
+        "after": {
+          "selected": [
+            "H1"
+          ],
+          "unsupported": [],
+          "supported": true,
+          "abstained": false
+        }
+      },
+      {
+        "id": "check-v2-7",
+        "topic": "revenue",
+        "gold": [],
+        "fixed_order": [
+          "H1",
+          "N0",
+          "N1"
+        ],
+        "before": {
+          "selected": [],
+          "unsupported": [],
+          "supported": false,
+          "abstained": true
+        },
+        "after": {
+          "selected": [],
+          "unsupported": [],
+          "supported": false,
+          "abstained": true
+        }
+      },
+      {
+        "id": "check-v2-8",
+        "topic": "profit",
+        "gold": [],
+        "fixed_order": [
+          "N0",
+          "N1",
+          "N2"
+        ],
+        "before": {
+          "selected": [],
+          "unsupported": [],
+          "supported": false,
+          "abstained": true
+        },
+        "after": {
+          "selected": [],
+          "unsupported": [],
+          "supported": false,
+          "abstained": true
+        }
+      },
+      {
+        "id": "check-v2-9",
+        "topic": "revenue",
+        "gold": [],
+        "fixed_order": [
+          "H1",
+          "N0",
+          "N1"
+        ],
+        "before": {
+          "selected": [],
+          "unsupported": [],
+          "supported": false,
+          "abstained": true
+        },
+        "after": {
+          "selected": [],
+          "unsupported": [],
+          "supported": false,
+          "abstained": true
+        }
+      },
+      {
+        "id": "check-v2-10",
+        "topic": "profit",
+        "gold": [],
+        "fixed_order": [
+          "H1",
+          "N0",
+          "N1"
+        ],
+        "before": {
+          "selected": [],
+          "unsupported": [],
+          "supported": false,
+          "abstained": true
+        },
+        "after": {
+          "selected": [],
+          "unsupported": [],
+          "supported": false,
+          "abstained": true
+        }
+      },
+      {
+        "id": "check-v2-11",
+        "topic": "revenue",
+        "gold": [],
+        "fixed_order": [
+          "N0",
+          "N1",
+          "N2"
+        ],
+        "before": {
+          "selected": [],
+          "unsupported": [],
+          "supported": false,
+          "abstained": true
+        },
+        "after": {
+          "selected": [],
+          "unsupported": [],
+          "supported": false,
+          "abstained": true
+        }
+      },
+      {
+        "id": "check-v2-12",
+        "topic": "profit",
+        "gold": [],
+        "fixed_order": [
+          "N0",
+          "N1",
+          "N2"
+        ],
+        "before": {
+          "selected": [],
+          "unsupported": [],
+          "supported": false,
+          "abstained": true
+        },
+        "after": {
+          "selected": [],
+          "unsupported": [],
+          "supported": false,
+          "abstained": true
+        }
+      }
+    ]
+  },
+  "constructed_safety_checks": {
+    "summary": {
+      "answerable": 1,
+      "unanswerable": 3,
+      "before": {
+        "supported": 0,
+        "correct_abstention": 3,
+        "unsupported": 0
+      },
+      "after": {
+        "supported": 1,
+        "correct_abstention": 3,
+        "unsupported": 0
+      }
+    },
+    "cases": [
+      {
+        "id": "negated-cause",
+        "topic": "revenue",
+        "gold": [],
+        "fixed_order": [
+          "N1"
+        ],
+        "before": {
+          "selected": [],
+          "unsupported": [],
+          "supported": false,
+          "abstained": true
+        },
+        "after": {
+          "selected": [],
+          "unsupported": [],
+          "supported": false,
+          "abstained": true
+        }
+      },
+      {
+        "id": "forecast-cause",
+        "topic": "profit",
+        "gold": [],
+        "fixed_order": [
+          "N1"
+        ],
+        "before": {
+          "selected": [],
+          "unsupported": [],
+          "supported": false,
+          "abstained": true
+        },
+        "after": {
+          "selected": [],
+          "unsupported": [],
+          "supported": false,
+          "abstained": true
+        }
+      },
+      {
+        "id": "two-metrics-wrong-target",
+        "topic": "profit",
+        "gold": [],
+        "fixed_order": [
+          "N1"
+        ],
+        "before": {
+          "selected": [],
+          "unsupported": [],
+          "supported": false,
+          "abstained": true
+        },
+        "after": {
+          "selected": [],
+          "unsupported": [],
+          "supported": false,
+          "abstained": true
+        }
+      },
+      {
+        "id": "two-metrics-right-target",
+        "topic": "revenue",
+        "gold": [
+          "H1"
+        ],
+        "fixed_order": [
+          "H1"
+        ],
+        "before": {
+          "selected": [],
+          "unsupported": [],
+          "supported": false,
+          "abstained": false
+        },
+        "after": {
+          "selected": [
+            "H1"
+          ],
+          "unsupported": [],
+          "supported": true,
+          "abstained": false
+        }
+      }
+    ]
+  },
+  "public_filing_probe": {
+    "summary": {
+      "answerable": 1,
+      "unanswerable": 1,
+      "before": {
+        "supported": 0,
+        "correct_abstention": 1,
+        "unsupported": 0
+      },
+      "after": {
+        "supported": 1,
+        "correct_abstention": 1,
+        "unsupported": 0
+      }
+    },
+    "cases": [
+      {
+        "id": "688363-2024-profit",
+        "topic": "profit",
+        "gold": [
+          "H1"
+        ],
+        "fixed_order": [
+          "N1",
+          "H1"
+        ],
+        "source": "https://static.cninfo.com.cn/finalpage/2025-07-01/1224042888.PDF",
+        "page": 52,
+        "annotation": "第52页业绩下滑风险段落。上文列举消费品收入下滑和经营成本增加，H1明确把这些因素归因到本期归母净利润下降。N1只有数字。",
+        "before": {
+          "selected": [],
+          "unsupported": [],
+          "supported": false,
+          "abstained": false
+        },
+        "after": {
+          "selected": [
+            "H1"
+          ],
+          "unsupported": [],
+          "supported": true,
+          "abstained": false
+        }
+      },
+      {
+        "id": "688363-2024-revenue-wrong-target",
+        "topic": "revenue",
+        "gold": [],
+        "fixed_order": [
+          "N1"
+        ],
+        "source": "https://static.cninfo.com.cn/finalpage/2025-07-01/1224042888.PDF",
+        "page": 52,
+        "annotation": "本题只提供利润归因句，不能用利润下降的归因解释营业收入变化。",
+        "before": {
+          "selected": [],
+          "unsupported": [],
+          "supported": false,
+          "abstained": true
+        },
+        "after": {
+          "selected": [],
+          "unsupported": [],
+          "supported": false,
+          "abstained": true
+        }
+      }
+    ]
+  }
+}

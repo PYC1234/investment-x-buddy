@@ -19,6 +19,7 @@ class StockArgs(BaseModel):
 
 class FinancialArgs(StockArgs):
     fiscal_year: int = Field(ge=2020, le=2030)
+    require_fiscal_year: bool = False
 
 
 @dataclass(frozen=True)

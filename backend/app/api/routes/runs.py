@@ -2,6 +2,13 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, Request, HTTPException, Query
 from fastapi.responses import StreamingResponse
+from pydantic import Field, ValidationError
+from starlette.concurrency import run_in_threadpool
+
+from app.services.annual_evidence import upload_task
+from app.services.documents import DocumentRequest, extract
+from app.services.research_sources import available_sources
+from app.schemas.research import AnnualScope
 import asyncio
 import time
 import json
@@ -30,6 +37,59 @@ async def create_run(request: CreateRunRequest, http_request: Request, service: 
     limit(service.store, 'research-create:'+user['id'], service.settings.max_run_requests_per_hour, seconds=3600)
     result = await service.create_run(request, owner_id=user['id'])
     return result
+
+
+@router.get("/annual-report-availability")
+def annual_report_availability(symbol: str, fiscal_year: int, service: RunService = Depends(get_run_service)):
+    try:
+        scope = AnnualScope(symbol=symbol, fiscal_year=fiscal_year)
+    except ValidationError as exc:
+        raise HTTPException(422, "请选择有效的 A 股代码和财年。") from exc
+    filings = available_sources(service.settings.research_data_dir, scope.symbol).get("search_company_filings", {})
+    return {"filing_available": scope.fiscal_year in filings.get("fiscal_years", [])}
+
+
+class AnnualUpload(DocumentRequest):
+    expected_updated_at: str = Field(min_length=1, max_length=100)
+    plan_version: int = Field(ge=1)
+    confirmed: bool
+    page_offset: int = Field(default=0, ge=0, le=1000)
+
+
+@router.post("/runs/{run_id}/annual-report")
+async def attach_annual_report(run_id: str, request: Request, service: RunService = Depends(get_run_service)):
+    run = service.get_run(run_id)
+    if run['planner_mode'] != 'annual_update' or run['status'] not in {'COMPLETE', 'PARTIAL'}:
+        raise HTTPException(409, "完成本次财报更新后才能补查 PDF。")
+    user = request.state.user
+    limit(service.store, 'annual-pdf:' + user['id'], 10, seconds=3600)
+    raw = bytearray()
+    async for chunk in request.stream():
+        if len(raw) + len(chunk) > 4 * 1024 * 1024 + 4096:
+            raise HTTPException(413, "PDF 文件不得超过 3 MB。")
+        raw.extend(chunk)
+    try:
+        body = AnnualUpload.model_validate_json(raw)
+    except ValidationError as exc:
+        raise HTTPException(422, "PDF 请求格式无效。") from exc
+    if not body.confirmed or not body.filename.lower().endswith('.pdf'):
+        raise HTTPException(422, "请确认 PDF 对应本次研究的公司和财年。")
+    if run['updated_at'] != body.expected_updated_at or run['plan_version'] != body.plan_version:
+        raise HTTPException(409, "研究状态已更新，请刷新后重试。")
+    if run['supplement_rounds'] >= service.settings.max_supplement_rounds:
+        raise HTTPException(409, "已达到补查轮次上限。")
+    pdf = await run_in_threadpool(extract, body, annual_pages=True)
+    args = run['tasks'][0]['arguments']
+    task = upload_task(pdf, args['symbol'], args['fiscal_year'], body.plan_version + 1, body.page_offset)
+    if not task:
+        raise HTTPException(422, "未找到营收或利润相关的文字。请检查是否上传了正确的章节。")
+    if any(item['arguments'].get('sha256') == pdf['sha256'] and item['arguments'].get('records') == task['arguments']['records']
+           for item in run['tasks']):
+        raise HTTPException(409, "同一份资料已加入本次研究。")
+    supplemented = service.propose_supplement(run_id, body.expected_updated_at, body.plan_version, uploaded_task=task)
+    if supplemented['status'] != 'PENDING_APPROVAL':
+        raise HTTPException(409, "本次研究的执行预算已用完。")
+    return supplemented
 
 
 @router.get("/runs/{run_id}")

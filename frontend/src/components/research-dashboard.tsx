@@ -17,7 +17,7 @@ import { createThread, evidence, initialThreads } from '@/data/demo';
 import { transition } from '@/lib/demo-machine';
 import { identity, privateFetch } from '@/lib/identity';
 import { applyBundle, configuredMode, demoGateway, researchApi, type AppMode } from '@/lib/research-gateway';
-import type { Preferences, ResearchThread, RunAction, WorkspaceTab } from '@/types/research';
+import type { AnnualScope, Preferences, ResearchThread, RunAction, WorkspaceTab } from '@/types/research';
 
 const now = () => new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
 const pollable = new Set(['PLANNING', 'APPROVED', 'RUNNING']);
@@ -145,7 +145,8 @@ export function ResearchDashboard() {
     await refreshRun(active.remoteRunId, active.id);
   };
 
-  const start = async () => {
+  const start = async (scope?: AnnualScope) => {
+    const researchGoal = scope ? `${scope.symbol} ${scope.fiscal_year} 年财报更新` : goal;
     if (documents.hasDocuments) {
       setTab('Research');
       await documents.send(goal);
@@ -156,8 +157,8 @@ export function ResearchDashboard() {
       return;
     }
     setApiError(null);
-    updateById(active.id, thread => ({ ...thread, loading: true, status: 'running', goal }));
-    const result = await researchApi.createRun(goal, preferences);
+    updateById(active.id, thread => ({ ...thread, loading: true, status: 'running', goal: researchGoal }));
+    const result = await researchApi.createRun(researchGoal, preferences, undefined, scope);
     if (!result.ok) {
       setApiError(result.error);
       updateById(active.id, thread => ({ ...thread, loading: false, status: 'failed' }));
@@ -188,18 +189,17 @@ export function ResearchDashboard() {
     <section className="workspace">
       <ResearchHeader thread={active} onMenu={() => setSidebarOpen(true)} mode={mode} />
       <div className="workspace-inner">
-        <ResearchInput thread={active} goal={goal} setGoal={setGoal} onStart={start} documentMode={documents.hasDocuments} busy={documents.busy}>{documents.controls}</ResearchInput>
+        <ResearchInput thread={active} goal={goal} setGoal={setGoal} onStart={() => void start()} onAnnualStart={mode === "api" ? start : undefined} documentMode={documents.hasDocuments} busy={documents.busy}>{documents.controls}</ResearchInput>
         <nav className="tabs" aria-label="工作区标签">{([['Research', BarChart3], ['Plan', ListChecks], ['Trace', ScrollText]] as const).filter(([tab])=>!documents.hasDocuments||tab==='Research').map(([tab, Icon]) => <button key={tab} data-testid={`tab-${tab.toLowerCase()}`} className={(documents.hasDocuments||active.tab === tab) ? 'active' : ''} onClick={() => setTab(tab)}><Icon />{documents.hasDocuments?'资料对话':tab}{tab === 'Plan' && active.status === 'approval' && <span className="tab-alert">1</span>}</button>)}</nav>
         <div className="tab-content">
-          {mode === 'api' && !documents.hasDocuments && <ResearchReview thread={active} onRefresh={() => active.remoteRunId ? refreshRun(active.remoteRunId, active.id) : Promise.resolve()} />}
-          {(active.tab === 'Research'||documents.hasDocuments) && <>{documents.messages}{!documents.hasDocuments&&<><FinancialMetrics data={data} state={active.loading ? 'loading' : data ? 'ready' : 'empty'} /><FinancialCharts data={data} state={active.loading ? 'loading' : data ? 'ready' : 'empty'} /><ResearchReport thread={active} data={data} onEvidence={setEvidenceId} mode={mode} /></>}</>}
+          {(active.tab === 'Research'||documents.hasDocuments) && <>{documents.messages}{!documents.hasDocuments&&<><FinancialMetrics data={data} state={active.loading ? 'loading' : data ? 'ready' : 'empty'} /><FinancialCharts data={data} state={active.loading ? 'loading' : data ? 'ready' : 'empty'} /><ResearchReport thread={active} data={data} onEvidence={setEvidenceId} mode={mode} review={mode === "api" && <ResearchReview key={active.remoteRunId ?? active.id} thread={active} onRefresh={() => active.remoteRunId ? refreshRun(active.remoteRunId, active.id) : Promise.resolve()} />} /></>}</>}
           {!documents.hasDocuments&&active.tab === 'Plan' && <ResearchPlan thread={active} expanded={expanded} setExpanded={setExpanded} onAction={dispatch} mode={mode} />}
           {!documents.hasDocuments&&active.tab === 'Trace' && <ExecutionTrace thread={active} />}
         </div>
       </div>
     </section>
     <AgentMonitor thread={active} mode={mode} apiError={apiError} onOpenPreferences={() => setPrefsOpen(true)} onSwitchDemo={() => { setMode('demo'); setApiError(null); }} />
-    <DetailDialog open={!!selectedEvidence} onOpenChange={open => !open && setEvidenceId(null)} title={`${selectedEvidence?.id ?? ''} · ${selectedEvidence?.title ?? ''}`} description={`${selectedEvidence?.type ?? ''} · ${selectedEvidence?.period ?? ''}`}><div className="dialog-copy"><strong>证据摘要</strong><pre className="evidence-json">{selectedEvidence?.detail}</pre><strong>限制</strong><p>{selectedEvidence?.limitation}</p><div className="demo-note">{(mode === 'demo' || (selectedEvidence && 'isDemo' in selectedEvidence && selectedEvidence.isDemo)) ? 'DEMO DATA · 此证据来自 Fixture 工具。' : 'FUYAO · 扶摇真实接口数据，时间以证据记录为准。'}</div></div></DetailDialog>
+    <DetailDialog open={!!selectedEvidence} onOpenChange={open => !open && setEvidenceId(null)} title={`${selectedEvidence?.id ?? ''} · ${selectedEvidence?.title ?? ''}`} description={`${selectedEvidence?.type ?? ''} · ${selectedEvidence?.period ?? ''}`}><div className="dialog-copy"><strong>证据摘要</strong><pre className="evidence-json">{selectedEvidence?.detail}</pre><strong>限制</strong><p>{selectedEvidence?.limitation}</p><div className="demo-note">{(mode === 'demo' || (selectedEvidence && 'isDemo' in selectedEvidence && selectedEvidence.isDemo)) ? 'DEMO DATA · 此证据来自 Fixture 工具。' : String(active.apiEvidence?.find(item => item.id === evidenceId)?.data.data_label ?? '来源以证据记录为准。')}</div></div></DetailDialog>
     <DetailDialog open={prefsOpen} onOpenChange={setPrefsOpen} title="Research Preferences" description={mode === 'api' ? '创建新 Run 时写入后端长期记忆' : 'Demo Mode 仅在本页面会话内保留'}><div className="preferences-form"><label>投资期限<select value={preferences.horizon} onChange={event => setPreferences(value => ({ ...value, horizon: event.target.value }))}><option>1 年以内</option><option>1–3 年</option><option>3–5 年</option><option>5 年以上</option></select></label><label>风险偏好<select value={preferences.risk} onChange={event => setPreferences(value => ({ ...value, risk: event.target.value }))}><option>保守</option><option>中等</option><option>进取</option></select></label><label className="check-row"><input type="checkbox" checked={preferences.evidence} onChange={event => setPreferences(value => ({ ...value, evidence: event.target.checked }))} />报告必须包含证据引用</label><div className="unavailable"><Server />{mode === 'api' ? '偏好将在创建 Run 时持久化' : '后端长期记忆：当前为本地演示'}</div></div></DetailDialog>
   </main>;
 }

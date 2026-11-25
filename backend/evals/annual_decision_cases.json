@@ -1,0 +1,51 @@
+{
+  "constructed_safety_checks": [
+    {
+      "id": "negated-cause",
+      "topic": "revenue",
+      "gold": [],
+      "candidates": [{"id": "N1", "text": "渠道调整未导致营业收入下降。"}]
+    },
+    {
+      "id": "forecast-cause",
+      "topic": "profit",
+      "gold": [],
+      "candidates": [{"id": "N1", "text": "设备减值可能导致归母净利润下降。"}]
+    },
+    {
+      "id": "two-metrics-wrong-target",
+      "topic": "profit",
+      "gold": [],
+      "candidates": [{"id": "N1", "text": "渠道扩张带动营业收入增长，归母净利润同比下降。"}]
+    },
+    {
+      "id": "two-metrics-right-target",
+      "topic": "revenue",
+      "gold": ["H1"],
+      "candidates": [{"id": "H1", "text": "渠道扩张带动营业收入增长，归母净利润同比下降。"}]
+    }
+  ],
+  "public_filing_probe": [
+    {
+      "id": "688363-2024-profit",
+      "topic": "profit",
+      "source": "https://static.cninfo.com.cn/finalpage/2025-07-01/1224042888.PDF",
+      "page": 52,
+      "annotation": "第52页业绩下滑风险段落。上文列举消费品收入下滑和经营成本增加，H1明确把这些因素归因到本期归母净利润下降。N1只有数字。",
+      "gold": ["H1"],
+      "candidates": [
+        {"id": "N1", "text": "归属于上市公司股东的净利润 17,426.74 万元，同比减少 70.59%；"},
+        {"id": "H1", "text": "以上因素导致归属于母公司所有者的净利润下降幅度较大。"}
+      ]
+    },
+    {
+      "id": "688363-2024-revenue-wrong-target",
+      "topic": "revenue",
+      "source": "https://static.cninfo.com.cn/finalpage/2025-07-01/1224042888.PDF",
+      "page": 52,
+      "annotation": "本题只提供利润归因句，不能用利润下降的归因解释营业收入变化。",
+      "gold": [],
+      "candidates": [{"id": "N1", "text": "以上因素导致归属于母公司所有者的净利润下降幅度较大。"}]
+    }
+  ]
+}

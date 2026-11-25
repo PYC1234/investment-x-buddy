@@ -1,12 +1,12 @@
 import { datasets, evidence, initialThreads, toolsRegistry } from '@/data/demo';
 import { privateFetch } from './identity';
-import type { ApiRunStatus, Dataset, Preferences, ResearchEvidence, ResearchReportData, ResearchTask, ResearchThread, ToolCall, ToolDefinition, TraceEvent, ResearchReviewData, ReportValidation } from '@/types/research';
+import type { AnnualAnswer, AnnualScope, ApiRunStatus, Dataset, Preferences, ResearchEvidence, ResearchReportData, ResearchTask, ResearchThread, ToolCall, ToolDefinition, TraceEvent, ResearchReviewData, ReportValidation } from '@/types/research';
 
 export type AppMode = 'api' | 'demo';
 export type ApiResult<T> = { ok: true; data: T } | { ok: false; error: string };
 export interface ApiTask { id: string; position: number; title: string; tool_name: string; arguments: Record<string, unknown>; rationale: string; status: string; attempts: number; evidence_id: string | null; error: string | null; task_key?: string; depends_on?: string[] }
 export interface ApiPlan { research_type?: string; scope?: string[]; limitations?: string[]; research_goal: string; tasks: Array<{ title: string; tool_name: string; arguments: Record<string, unknown>; rationale: string; question?: string; completion_criteria?: string[] }> }
-export interface ApiReport { title: string; status: string; data_notice: string; quality_status?: string; executive_summary: string; findings: Array<{ task: string; statement: string; evidence_ids: string[] }>; missing_information: string[]; evidence_ids: string[]; research_review?: ResearchReviewData; validation?: ReportValidation }
+export interface ApiReport { annual_answers?: AnnualAnswer[]; title: string; status: string; data_notice: string; quality_status?: string; executive_summary: string; findings: Array<{ task: string; statement: string; evidence_ids: string[] }>; missing_information: string[]; evidence_ids: string[]; research_review?: ResearchReviewData; validation?: ReportValidation }
 export interface ApiRun { id: string; thread_id: string; goal: string; status: ApiRunStatus; plan_version: number; planner_mode: string; plan: ApiPlan | null; approval: { plan_version: number; allowed_tools: string[]; approved_at: string } | null; report: ApiReport | null; error: string | null; created_at: string; updated_at: string; started_at: string | null; completed_at: string | null; tasks: ApiTask[]; usage: { prompt_tokens: number; completion_tokens: number; total_tokens: number; estimated_cost_usd: number | null; cost_status: string } }
 export interface ApiEvent { id: number; event_type: string; data: Record<string, unknown>; created_at: string }
 export interface ApiEvidence { id: string; task_id: string; tool_name: string; title: string; data: Record<string, unknown>; is_demo: boolean; created_at: string }
@@ -25,7 +25,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<ApiResult<T
     const response = await privateFetch(path, init);
     if (!response.ok) {
       let detail = '';
-      try { const body = await response.json() as { error?: { message?: string } }; detail = body.error?.message ? ` · ${body.error.message}` : ''; } catch { /* non-JSON error */ }
+      try { const body = await response.json() as { error?: { message?: string }; detail?: string }; detail = body.error?.message ? ` · ${body.error.message}` : typeof body.detail === 'string' ? ` · ${body.detail}` : ''; } catch { /* non-JSON error */ }
       return { ok: false, error: `API ${response.status}: ${response.statusText}${detail}` };
     }
     return { ok: true, data: await response.json() as T };
@@ -87,7 +87,7 @@ function mapEvidence(item: ApiEvidence): ResearchEvidence {
   return { id: item.id, title: item.title, type: item.tool_name, period: evidencePeriod(item), detail: JSON.stringify(item.data, null, 2), limitation: limitation || (item.is_demo ? 'FIXTURE / DEMO DATA；并非实时金融数据。' : '质量未检查；扶摇接口时间不保证为成交时间，尚未交叉核验。'), isDemo: item.is_demo, toolName: item.tool_name, data: item.data };
 }
 function mapReport(report: ApiReport | null): ResearchReportData | null {
-  return report ? { title: report.title, status: report.status, qualityStatus: report.quality_status ?? 'NOT_CHECKED', dataNotice: report.data_notice, executiveSummary: report.executive_summary, findings: report.findings.map(item => ({ task: item.task, statement: item.statement, evidenceIds: item.evidence_ids })), missingInformation: report.missing_information, evidenceIds: report.evidence_ids, review: report.research_review, validation: report.validation } : null;
+  return report ? { annualAnswers: report.annual_answers, title: report.title, status: report.status, qualityStatus: report.quality_status ?? 'NOT_CHECKED', dataNotice: report.data_notice, executiveSummary: report.executive_summary, findings: report.findings.map(item => ({ task: item.task, statement: item.statement, evidenceIds: item.evidence_ids })), missingInformation: report.missing_information, evidenceIds: report.evidence_ids, review: report.research_review, validation: report.validation } : null;
 }
 function evidenceDataset(items: ApiEvidence[], report: ApiReport | null): Dataset | null {
   if (!items.length) return null;
@@ -141,7 +141,10 @@ export function applyBundle(thread: ResearchThread, bundle: RunBundle): Research
 
 export const researchApi = {
   tools: (signal?: AbortSignal) => request<ApiTool[]>('/api/v1/tools', { signal }),
-  createRun: (goal: string, preferences: Preferences, signal?: AbortSignal) => request<ApiRun>('/api/v1/runs', { method: 'POST', body: JSON.stringify({ goal, preferences }), signal }),
+  createRun: (goal: string, preferences: Preferences, signal?: AbortSignal, annualScope?: AnnualScope) => request<ApiRun>('/api/v1/runs', { method: 'POST', body: JSON.stringify({ goal, preferences, annual_scope: annualScope }), signal }),
+  annualAvailability: (scope: AnnualScope) => request<{ filing_available: boolean }>(`/api/v1/annual-report-availability?symbol=${encodeURIComponent(scope.symbol)}&fiscal_year=${scope.fiscal_year}`),
+  attachAnnualReport: (id: string, payload: {filename: string; content_base64: string; plan_version: number; expected_updated_at: string; confirmed: boolean; page_offset: number}) =>
+    request<ApiRun>(`/api/v1/runs/${encodeURIComponent(id)}/annual-report`, { method: 'POST', body: JSON.stringify(payload) }),
   getRunBundle: loadRunBundle,
   approve: (id: string, planVersion: number, allowedTools: string[], signal?: AbortSignal) => request<ApiRun>(`/api/v1/runs/${id}/approve`, { method: 'POST', body: JSON.stringify({ plan_version: planVersion, allowed_tools: allowedTools }), signal }),
   reject: (id: string, planVersion: number, reason: string, signal?: AbortSignal) => request<ApiRun>(`/api/v1/runs/${id}/reject`, { method: 'POST', body: JSON.stringify({ plan_version: planVersion, reason }), signal }),

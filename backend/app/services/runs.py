@@ -67,17 +67,45 @@ class RunService:
         self._event(run_id, "run.created", {"status": "PLANNING"})
         preferences = self.get_memory(thread_id).get("research_preferences", {})
         try:
-            result = await self.planner.plan(request.goal, preferences)
+            from app.services.annual_update import AnnualScopeError, annual_update_year, build_annual_update
+            from app.schemas.research import PlannedTask
+            from app.services.planner import PlanResult
+
+            year = request.annual_scope.fiscal_year if request.annual_scope else annual_update_year(request.goal)
+            if year is None:
+                result = await self.planner.plan(request.goal, preferences)
+                if result.plan.research_type == "profitability":
+                    from app.services.fuyao import FUYAO_STATEMENTS
+                    from app.services.research_sources import SUPPLEMENT_TOOLS
+                    planned = {task.tool_name for task in result.plan.tasks}
+                    labels = {key: label for key, label in SUPPLEMENT_TOOLS.values()}
+                    for name, (_, dataset, _) in FUYAO_STATEMENTS.items():
+                        if name in planned or name not in self.registry.names() or len(result.plan.tasks) >= 8:
+                            continue
+                        label = labels[dataset]
+                        result.plan.tasks.append(PlannedTask(
+                            task_key=f"fuyao_{dataset}", tool_name=name, title=f"年度合并{label}",
+                            arguments={"symbol": resolve_symbol(request.goal)}, rationale=f"从扶摇获取{label}用于盈利质量核验。",
+                        ))
+                        result.plan.scope.append(f"扶摇年度合并{label}")
+                    if set(FUYAO_STATEMENTS) <= {task.tool_name for task in result.plan.tasks}:
+                        result.plan.limitations = ["报表覆盖和年度可比性以工具结果为准；尚未与交易所原文交叉核验。"]
+            else:
+                plan = build_annual_update(request.goal, request.annual_scope.symbol if request.annual_scope else resolve_symbol(request.goal), year,
+                                           self.settings.research_data_dir)
+                result = PlanResult(plan, "annual_update")
             for task in result.plan.tasks:
+                if task.tool_name == "read_uploaded_annual_report":
+                    raise ValueError("Uploaded PDF evidence requires an owned run and supplemental approval")
                 self.registry.validate(task.tool_name, task.arguments)
-            symbol = resolve_symbol(request.goal)
+            symbol = request.annual_scope.symbol if request.annual_scope else resolve_symbol(request.goal)
             for task in result.plan.tasks:
                 if task.arguments.get('symbol') != symbol:
                     raise ValueError('Plan stock does not match the confirmed research goal')
-        except SymbolResolutionError as exc:
+        except (SymbolResolutionError, AnnualScopeError) as exc:
             self.store.execute("UPDATE runs SET status='FAILED',error=?,updated_at=? WHERE id=?", (str(exc), now_iso(), run_id))
             self._event(run_id, "plan.invalid", {"error": str(exc)})
-            raise AppError(status_code=422, code="invalid_symbol", message=str(exc)) from exc
+            raise AppError(status_code=422, code="invalid_annual_scope" if isinstance(exc, AnnualScopeError) else "invalid_symbol", message=str(exc)) from exc
         except (ValueError, json.JSONDecodeError) as exc:
             self.store.execute("UPDATE runs SET status='FAILED',error=?,updated_at=? WHERE id=?", (str(exc), now_iso(), run_id))
             self._event(run_id, "plan.invalid", {"error": "Planner returned an invalid or unauthorized plan."})
@@ -174,8 +202,12 @@ class RunService:
         evidence = self.get_evidence(run_id)
         report = self._build_report(run_id, status, stop_reason)
         report['research_review'] = review_research(run['goal'], run['tasks'], evidence, self.registry,
-            self.settings.research_data_dir, run['supplement_rounds'], self.settings.max_supplement_rounds)
+            self.settings.research_data_dir, run['supplement_rounds'], self.settings.max_supplement_rounds,
+            annual_year=run['tasks'][0]['arguments']['fiscal_year'] if run['planner_mode'] == 'annual_update' else None)
         report['coverage_status'] = report['research_review']['coverage_status']
+        if run['planner_mode'] == 'annual_update':
+            from app.services.annual_evidence import annual_answers
+            report['annual_answers'] = annual_answers(evidence, run['tasks'][0]['arguments']['fiscal_year'])
         supplemental = {e['tool_name'] for e in evidence if e['data'].get('dataset') and e['data'].get('quality', {}).get('usable', True)}
         if supplemental:
             labels = sorted({e['data'].get('data_label', 'DEMO DATA' if e['is_demo'] else 'UNSPECIFIED SOURCE') for e in evidence})
@@ -186,10 +218,15 @@ class RunService:
             if {'get_valuation_history','get_peer_valuations'} <= supplemental:
                 for finding in report['findings']:
                     finding['statement'] = finding['statement'].replace('缺少同业和历史区间，不能单凭倍数认定低估或高估。', '另有导入历史与同业样本；样本完整性及可比性尚未独立核验，不能单凭倍数认定低估或高估。')
+        if run['planner_mode'] == 'annual_update' and 'search_company_filings' in report['research_review']['unanswered_questions']:
+            report['findings'].append({
+                'task': '管理层解释', 'statement': '尚无匹配报告期的可用原文，无法核对管理层对盈利变化的解释。',
+                'evidence_ids': [],
+            })
         report['missing_information'].extend(report['research_review']['missing_evidence'])
         return attach_validation(report, evidence)
 
-    def propose_supplement(self, run_id, expected_updated_at, plan_version):
+    def propose_supplement(self, run_id, expected_updated_at, plan_version, *, uploaded_task=None):
         run = self.get_run(run_id)
         if run['status'] not in {'COMPLETE', 'PARTIAL'} or run['updated_at'] != expected_updated_at or run['plan_version'] != plan_version:
             raise AppError(status_code=409, code='supplement_state_changed', message='研究状态已变化，请刷新后重试。')
@@ -197,8 +234,13 @@ class RunService:
             return run
         from app.services.research_review import review_research
         review = review_research(run['goal'], run['tasks'], self.get_evidence(run_id), self.registry,
-            self.settings.research_data_dir, run['supplement_rounds'], self.settings.max_supplement_rounds)
-        proposed = review['proposed_tasks']
+            self.settings.research_data_dir, run['supplement_rounds'], self.settings.max_supplement_rounds,
+            annual_year=run['tasks'][0]['arguments']['fiscal_year'] if run['planner_mode'] == 'annual_update' else None)
+        proposed = [uploaded_task] if uploaded_task else review['proposed_tasks']
+        if uploaded_task and (run['planner_mode'] != 'annual_update'
+                or run['supplement_rounds'] >= self.settings.max_supplement_rounds
+                or len(run['tasks']) >= 8):
+            raise AppError(status_code=409, code='upload_supplement_unavailable', message='本次研究无法继续补查。')
         if not proposed:
             return run
         data = dict(run['plan'])
@@ -231,7 +273,8 @@ class RunService:
         run = self._run_or_404(run_id)
         tasks = self.store.fetch_all("SELECT * FROM tasks WHERE run_id=? ORDER BY position", (run_id,))
         evidence = self.store.fetch_all("SELECT * FROM evidence WHERE run_id=? ORDER BY created_at", (run_id,))
-        if any(not item["is_demo"] for item in evidence) or any(tool["data_source"] == "FUYAO / MARKET DATA" for tool in self.registry.schemas()):
+        annual_update = run['planner_mode'] == 'annual_update'
+        if annual_update or any(not item["is_demo"] for item in evidence) or any(tool["data_source"] == "FUYAO / MARKET DATA" for tool in self.registry.schemas()):
             focus = (run.get("plan") or {}).get("research_type", "comprehensive")
             scope = (run.get("plan") or {}).get("scope") or [task["title"] for task in tasks]
             focus_title = {"profitability": "盈利能力初步研究", "valuation": "估值初步研究", "risk": "风险线索初步研究", "comprehensive": "综合研究摘要"}[focus]
@@ -240,6 +283,8 @@ class RunService:
             bank_risk = is_bank and ("风险" in run["goal"] or "risk" in run["goal"].lower())
             findings = []
             missing = [task["title"] + ": " + str(task.get("error") or "未完成") for task in tasks if task["status"] != "COMPLETED"]
+            if annual_update:
+                missing.extend((run.get("plan") or {}).get("limitations", [])[:1])
             def number(value):
                 return "未提供" if value is None else f"{value:,.2f}"
             for item in evidence:
@@ -254,10 +299,18 @@ class RunService:
                     statement = "DEMO DATA：此条为演示证据，不可用于真实结论。"
                 elif data.get('dataset'):
                     count = len(data.get('records', []))
-                    statement = f"导入公开资料：{item['title']}，取得 {count} 条带来源与口径的记录。仅覆盖导入样本，尚未独立交叉核验。"
+                    statement = f"{data.get('data_label', '导入公开资料')}：{item['title']}，取得 {count} 条带来源与口径的记录。尚未独立交叉核验。"
+                    if data.get('dataset') == 'filings':
+                        statement = '找到相关年报原文。请核对下方摘录及其上下文，判断是否解释了具体的盈利变化。'
                     if data.get('statistics'):
                         stats = data['statistics']
                         statement += f"样本 PE(TTM) 区间 {stats['min_pe_ttm']:.2f}–{stats['max_pe_ttm']:.2f} 倍；不代表全历史区间。"
+                    if data.get("data_label") == "FUYAO / MARKET DATA" and data["records"]:
+                        latest = data["records"][-1]
+                        if data["dataset"] == "cash_flows":
+                            statement += f" {latest['period']} 年度经营活动现金流量净额 {number(latest['operating_cash_flow'] / 1e8)} 亿元。"
+                        elif data["dataset"] == "balance_sheets":
+                            statement += f" {latest['period']} 总资产 {number(latest['total_assets'] / 1e8)} 亿元，总负债 {number(latest['total_liabilities'] / 1e8)} 亿元。"
                 elif "snapshot" in data:
                     row = data["snapshot"]
                     statement = f"扶摇行情快照：价格 {number(row.get('price_cny'))} 元，涨跌幅 {number(row.get('change_percent'))}%。取得 {len(data.get('prices', []))} 条前复权日线。接口时间（北京时间）{datetime.fromtimestamp(data['timestamp_ms']/1000, timezone(timedelta(hours=8))).strftime('%Y-%m-%d %H:%M:%S') if isinstance(data.get('timestamp_ms'), (int, float)) else '未提供'}；接口时间不保证等于最新成交时间。"
@@ -268,7 +321,12 @@ class RunService:
                     rows = data.get("financial_history", [])
                     latest = rows[-1] if rows else {}
                     statement = f"盈利：{latest.get('year', '最近年度')} 年营业收入 {number(latest.get('revenue'))} 亿元，归母净利润 {number(latest.get('profit'))} 亿元。"
-                    if len(rows) > 1 and rows[-2].get('revenue'):
+                    if annual_update and len(rows) < 2:
+                        statement += ' 未取得可比较的上年完整数据，无法判断年度变化。'
+                    if annual_update and len(rows) > 1:
+                        previous = rows[-2]
+                        statement += f" 上年营业收入 {number(previous.get('revenue'))} 亿元，归母净利润 {number(previous.get('profit'))} 亿元。"
+                    if len(rows) > 1 and rows[-2].get('revenue') and latest.get('revenue') is not None:
                         growth = (latest['revenue'] / rows[-2]['revenue'] - 1) * 100
                         statement += f"营业收入较上一可用年度变化 {growth:.2f}%；"
                         statement += "银行盈利需结合净息差、信用减值与非息收入验证，利润表总额不足以判断资产质量。" if is_bank else "需结合现金回款验证盈利质量。"
@@ -276,20 +334,44 @@ class RunService:
                 if notices:
                     statement += " 质量提示：" + "；".join(notices)
                 findings.append({"task": item["title"], "statement": statement, "evidence_ids": [item["id"]]})
-                if data.get("missing_information"):
+                if data.get("missing_information") and not (focus == "profitability" and item["tool_name"] == "get_financial_summary"):
                     missing.append(data["missing_information"])
+            if focus == "profitability" and not annual_update:
+                usable = {item["tool_name"]: item for item in evidence
+                          if not item["is_demo"] and item["data"].get("available", True)
+                          and item["data"].get("quality", {}).get("usable", True)}
+                income = usable.get("get_financial_summary")
+                if income and (rows := income["data"].get("financial_history")):
+                    latest = rows[-1]
+                    profit = latest.get("profit")
+                    revenue = latest.get("revenue")
+                    if profit is not None and revenue and revenue > 0:
+                        findings.append({"task": "归母净利润占营收比例",
+                                         "statement": f"{latest['year']} 年为 {profit / revenue:.2%}。",
+                                         "evidence_ids": [income["id"]]})
+                    cash = usable.get("get_fuyao_cash_flow")
+                    if cash and profit and profit > 0:
+                        matching = next((row for row in cash["data"]["records"]
+                                         if row["period"] == f"{latest['year']}-12-31"), None)
+                        if matching:
+                            ratio = matching["operating_cash_flow"] / (profit * 1e8)
+                            findings.append({"task": "经营现金流与归母净利润对照",
+                                             "statement": f"{latest['year']} 年经营活动现金流量净额相当于归母净利润的 {ratio:.2%}。两项口径不同，比例用于观察现金流与利润的关系。",
+                                             "evidence_ids": [cash["id"], income["id"]]})
             if bank_risk:
                 findings.append({"task": "银行风险研究覆盖", "statement": "现有证据仅覆盖价格、年度营收与利润、估值倍数。尚未取得不良贷款率、关注及逾期贷款、拨备覆盖率、净息差、核心一级资本充足率和重点行业贷款敞口，无法判断资产质量、资本缓冲或流动性风险。以下为待核验方向，不代表这些风险已发生。", "evidence_ids": []})
             if is_bank:
                 missing.extend(["银行专属数据缺失：不良贷款率、关注及逾期贷款、拨备覆盖率、净息差、核心一级资本充足率、流动性指标与房地产等重点行业贷款敞口。", "待核验风险：资产质量变化、信用减值压力、净息差变化及资本与流动性缓冲；不能从现有利润表推断风险已发生。", "PB 低于 1 不自动代表低估，需结合 ROE、资产质量、资本要求与历史同业比较。"])
-            else:
+            elif not annual_update and focus != "profitability":
                 missing.append("风险待验证：需求与渠道回款走弱可能影响利润；利率或风险偏好变化可能压缩估值。")
-            missing.extend(["数据来自扶摇接口，尚未与交易所原始公告交叉核验；行情时间以证据记录为准。", "缺少历史估值区间、同业比较及完整财务报表，无法可靠计算公允价值或目标价。", "年度变化为相邻可用年度比较，仍需核对报表口径、会计调整及可比性，不能据此解释变化原因。", "COMPLETE 表示任务执行完成；研究覆盖有限，不表示风险核验已完成。"])
+            missing.extend(["扶摇接口数据尚未与交易所原始公告交叉核验。", "年度比较仍需核对报表口径、会计调整及可比性；变化原因需看年报原文。"])
+            if focus != "profitability":
+                missing.append("估值须结合历史区间、同业及财务口径核对。")
             if stop_reason:
                 missing.append(stop_reason)
             quality_rows = [{"evidence_id": item["id"], **item["data"]["quality"]} for item in evidence if item["data"].get("quality")]
             quality_status = "FAIL" if any(row["status"] == "FAIL" for row in quality_rows) else "WARN" if any(row["status"] == "WARN" for row in quality_rows) else "PASS" if quality_rows else "NOT_CHECKED"
-            return {"title": f"{'银行风险初步研究' if bank_risk else focus_title}：{run['goal']}", "status": status, "data_notice": "FUYAO / MARKET DATA · 接口数据；新鲜度和可用性以证据质量提示为准。", "coverage_status": "LIMITED", "quality_status": quality_status, "quality_checks": quality_rows, "executive_summary": f"取得 {len(evidence)}/{len(tasks)} 项证据，其中 {sum(item['data'].get('quality', {}).get('usable', True) for item in evidence)} 项未被质量检查阻断。本次范围：{'；'.join(scope)}。报告仅依据取得的证据整理；研究覆盖有限，不能替代完整核验。", "findings": findings, "missing_information": list(dict.fromkeys(missing)), "evidence_ids": [item["id"] for item in evidence]}
+            return {"title": f"{'银行风险初步研究' if bank_risk else focus_title}：{run['goal']}", "status": status, "data_notice": "DEMO DATA · 演示证据不可用于真实判断。" if evidence and all(item["is_demo"] for item in evidence) else "各条证据的来源、报告期和质量以引用为准。", "coverage_status": "LIMITED", "quality_status": quality_status, "quality_checks": quality_rows, "executive_summary": f"取得 {len(evidence)}/{len(tasks)} 项证据，其中 {sum(item['data'].get('quality', {}).get('usable', True) for item in evidence)} 项未被质量检查阻断。本次范围：{'；'.join(scope)}。报告仅依据取得的证据整理；关键发现需结合来源核对。", "findings": findings, "missing_information": list(dict.fromkeys(missing)), "evidence_ids": [item["id"] for item in evidence]}
         by_task = {item["task_id"]: item for item in evidence}
         findings = []
         missing = []

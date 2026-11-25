@@ -1,0 +1,524 @@
+{
+  "summary": {
+    "baseline": {
+      "answerable": 4,
+      "hit_at_3": 0,
+      "unanswerable": 7,
+      "correct_abstentions": 7,
+      "unsupported_excerpts": 0,
+      "supported_decisions": 0,
+      "mrr_at_3_answerable": 0
+    },
+    "topic_keywords": {
+      "answerable": 4,
+      "hit_at_3": 2,
+      "unanswerable": 7,
+      "correct_abstentions": 7,
+      "unsupported_excerpts": 0,
+      "supported_decisions": 2,
+      "mrr_at_3_answerable": 0.5
+    },
+    "proposed": {
+      "answerable": 4,
+      "hit_at_3": 4,
+      "unanswerable": 7,
+      "correct_abstentions": 7,
+      "unsupported_excerpts": 0,
+      "supported_decisions": 4,
+      "mrr_at_3_answerable": 1.0
+    }
+  },
+  "cases": [
+    {
+      "id": "public-revenue",
+      "topic": "revenue",
+      "gold": [
+        "public-p9"
+      ],
+      "stratum": "legacy",
+      "scope_exclusions": 0,
+      "baseline": {
+        "top3": [
+          "noise-0",
+          "noise-1",
+          "noise-2"
+        ],
+        "direct": [],
+        "hit": false,
+        "reciprocal_rank": 0,
+        "supported_decision": false,
+        "unsupported": [],
+        "correct_abstention": false
+      },
+      "topic_keywords": {
+        "top3": [
+          "noise-0",
+          "noise-1",
+          "noise-2"
+        ],
+        "direct": [],
+        "hit": false,
+        "reciprocal_rank": 0,
+        "supported_decision": false,
+        "unsupported": [],
+        "correct_abstention": false
+      },
+      "proposed": {
+        "top3": [
+          "public-p9",
+          "noise-0",
+          "noise-1"
+        ],
+        "direct": [
+          "public-p9"
+        ],
+        "hit": true,
+        "reciprocal_rank": 1.0,
+        "supported_decision": true,
+        "unsupported": [],
+        "correct_abstention": false
+      }
+    },
+    {
+      "id": "public-background-only",
+      "topic": "revenue",
+      "gold": [],
+      "stratum": "legacy",
+      "scope_exclusions": 0,
+      "baseline": {
+        "top3": [
+          "public-p25"
+        ],
+        "direct": [],
+        "hit": false,
+        "reciprocal_rank": 0,
+        "supported_decision": false,
+        "unsupported": [],
+        "correct_abstention": true
+      },
+      "topic_keywords": {
+        "top3": [
+          "public-p25"
+        ],
+        "direct": [],
+        "hit": false,
+        "reciprocal_rank": 0,
+        "supported_decision": false,
+        "unsupported": [],
+        "correct_abstention": true
+      },
+      "proposed": {
+        "top3": [
+          "public-p25"
+        ],
+        "direct": [],
+        "hit": false,
+        "reciprocal_rank": 0,
+        "supported_decision": false,
+        "unsupported": [],
+        "correct_abstention": true
+      }
+    },
+    {
+      "id": "profit-vs-revenue",
+      "topic": "profit",
+      "gold": [
+        "profit"
+      ],
+      "stratum": "legacy",
+      "scope_exclusions": 0,
+      "baseline": {
+        "top3": [
+          "noise-0",
+          "noise-1",
+          "noise-2"
+        ],
+        "direct": [],
+        "hit": false,
+        "reciprocal_rank": 0,
+        "supported_decision": false,
+        "unsupported": [],
+        "correct_abstention": false
+      },
+      "topic_keywords": {
+        "top3": [
+          "profit",
+          "noise-0",
+          "noise-1"
+        ],
+        "direct": [
+          "profit"
+        ],
+        "hit": true,
+        "reciprocal_rank": 1.0,
+        "supported_decision": true,
+        "unsupported": [],
+        "correct_abstention": false
+      },
+      "proposed": {
+        "top3": [
+          "profit",
+          "noise-0",
+          "noise-1"
+        ],
+        "direct": [
+          "profit"
+        ],
+        "hit": true,
+        "reciprocal_rank": 1.0,
+        "supported_decision": true,
+        "unsupported": [],
+        "correct_abstention": false
+      }
+    },
+    {
+      "id": "wrong-period",
+      "topic": "revenue",
+      "gold": [],
+      "stratum": "legacy",
+      "scope_exclusions": 1,
+      "baseline": {
+        "top3": [
+          "noise-0",
+          "noise-1",
+          "noise-2"
+        ],
+        "direct": [],
+        "hit": false,
+        "reciprocal_rank": 0,
+        "supported_decision": false,
+        "unsupported": [],
+        "correct_abstention": true
+      },
+      "topic_keywords": {
+        "top3": [
+          "noise-0",
+          "noise-1",
+          "noise-2"
+        ],
+        "direct": [],
+        "hit": false,
+        "reciprocal_rank": 0,
+        "supported_decision": false,
+        "unsupported": [],
+        "correct_abstention": true
+      },
+      "proposed": {
+        "top3": [
+          "noise-0",
+          "noise-1",
+          "noise-2"
+        ],
+        "direct": [],
+        "hit": false,
+        "reciprocal_rank": 0,
+        "supported_decision": false,
+        "unsupported": [],
+        "correct_abstention": true
+      }
+    },
+    {
+      "id": "wrong-company",
+      "topic": "revenue",
+      "gold": [],
+      "stratum": "legacy",
+      "scope_exclusions": 1,
+      "baseline": {
+        "top3": [
+          "noise-0",
+          "noise-1",
+          "noise-2"
+        ],
+        "direct": [],
+        "hit": false,
+        "reciprocal_rank": 0,
+        "supported_decision": false,
+        "unsupported": [],
+        "correct_abstention": true
+      },
+      "topic_keywords": {
+        "top3": [
+          "noise-0",
+          "noise-1",
+          "noise-2"
+        ],
+        "direct": [],
+        "hit": false,
+        "reciprocal_rank": 0,
+        "supported_decision": false,
+        "unsupported": [],
+        "correct_abstention": true
+      },
+      "proposed": {
+        "top3": [
+          "noise-0",
+          "noise-1",
+          "noise-2"
+        ],
+        "direct": [],
+        "hit": false,
+        "reciprocal_rank": 0,
+        "supported_decision": false,
+        "unsupported": [],
+        "correct_abstention": true
+      }
+    },
+    {
+      "id": "heading-only",
+      "topic": "revenue",
+      "gold": [],
+      "stratum": "legacy",
+      "scope_exclusions": 0,
+      "baseline": {
+        "top3": [
+          "heading",
+          "background"
+        ],
+        "direct": [],
+        "hit": false,
+        "reciprocal_rank": 0,
+        "supported_decision": false,
+        "unsupported": [],
+        "correct_abstention": true
+      },
+      "topic_keywords": {
+        "top3": [
+          "heading",
+          "background"
+        ],
+        "direct": [],
+        "hit": false,
+        "reciprocal_rank": 0,
+        "supported_decision": false,
+        "unsupported": [],
+        "correct_abstention": true
+      },
+      "proposed": {
+        "top3": [
+          "heading",
+          "background"
+        ],
+        "direct": [],
+        "hit": false,
+        "reciprocal_rank": 0,
+        "supported_decision": false,
+        "unsupported": [],
+        "correct_abstention": true
+      }
+    },
+    {
+      "id": "no-corpus",
+      "topic": "profit",
+      "gold": [],
+      "stratum": "legacy",
+      "scope_exclusions": 0,
+      "baseline": {
+        "top3": [],
+        "direct": [],
+        "hit": false,
+        "reciprocal_rank": 0,
+        "supported_decision": false,
+        "unsupported": [],
+        "correct_abstention": true
+      },
+      "topic_keywords": {
+        "top3": [],
+        "direct": [],
+        "hit": false,
+        "reciprocal_rank": 0,
+        "supported_decision": false,
+        "unsupported": [],
+        "correct_abstention": true
+      },
+      "proposed": {
+        "top3": [],
+        "direct": [],
+        "hit": false,
+        "reciprocal_rank": 0,
+        "supported_decision": false,
+        "unsupported": [],
+        "correct_abstention": true
+      }
+    },
+    {
+      "id": "metric-mismatch",
+      "topic": "profit",
+      "gold": [],
+      "stratum": "legacy",
+      "scope_exclusions": 0,
+      "baseline": {
+        "top3": [
+          "revenue"
+        ],
+        "direct": [],
+        "hit": false,
+        "reciprocal_rank": 0,
+        "supported_decision": false,
+        "unsupported": [],
+        "correct_abstention": true
+      },
+      "topic_keywords": {
+        "top3": [
+          "revenue"
+        ],
+        "direct": [],
+        "hit": false,
+        "reciprocal_rank": 0,
+        "supported_decision": false,
+        "unsupported": [],
+        "correct_abstention": true
+      },
+      "proposed": {
+        "top3": [],
+        "direct": [],
+        "hit": false,
+        "reciprocal_rank": 0,
+        "supported_decision": false,
+        "unsupported": [],
+        "correct_abstention": true
+      }
+    },
+    {
+      "id": "correct-and-wrong-period",
+      "topic": "revenue",
+      "gold": [
+        "current"
+      ],
+      "stratum": "legacy",
+      "scope_exclusions": 1,
+      "baseline": {
+        "top3": [
+          "noise-0",
+          "noise-1",
+          "noise-2"
+        ],
+        "direct": [],
+        "hit": false,
+        "reciprocal_rank": 0,
+        "supported_decision": false,
+        "unsupported": [],
+        "correct_abstention": false
+      },
+      "topic_keywords": {
+        "top3": [
+          "noise-0",
+          "noise-1",
+          "noise-2"
+        ],
+        "direct": [],
+        "hit": false,
+        "reciprocal_rank": 0,
+        "supported_decision": false,
+        "unsupported": [],
+        "correct_abstention": false
+      },
+      "proposed": {
+        "top3": [
+          "current",
+          "noise-0",
+          "noise-1"
+        ],
+        "direct": [
+          "current"
+        ],
+        "hit": true,
+        "reciprocal_rank": 1.0,
+        "supported_decision": true,
+        "unsupported": [],
+        "correct_abstention": false
+      }
+    },
+    {
+      "id": "causal-alias",
+      "topic": "profit",
+      "gold": [
+        "alias"
+      ],
+      "stratum": "legacy",
+      "scope_exclusions": 0,
+      "baseline": {
+        "top3": [
+          "noise-0",
+          "noise-1",
+          "noise-2"
+        ],
+        "direct": [],
+        "hit": false,
+        "reciprocal_rank": 0,
+        "supported_decision": false,
+        "unsupported": [],
+        "correct_abstention": false
+      },
+      "topic_keywords": {
+        "top3": [
+          "alias",
+          "noise-0",
+          "noise-1"
+        ],
+        "direct": [
+          "alias"
+        ],
+        "hit": true,
+        "reciprocal_rank": 1.0,
+        "supported_decision": true,
+        "unsupported": [],
+        "correct_abstention": false
+      },
+      "proposed": {
+        "top3": [
+          "alias",
+          "noise-0",
+          "noise-1"
+        ],
+        "direct": [
+          "alias"
+        ],
+        "hit": true,
+        "reciprocal_rank": 1.0,
+        "supported_decision": true,
+        "unsupported": [],
+        "correct_abstention": false
+      }
+    },
+    {
+      "id": "cross-metric-clause",
+      "topic": "revenue",
+      "gold": [],
+      "stratum": "legacy",
+      "scope_exclusions": 0,
+      "baseline": {
+        "top3": [
+          "mixed"
+        ],
+        "direct": [],
+        "hit": false,
+        "reciprocal_rank": 0,
+        "supported_decision": false,
+        "unsupported": [],
+        "correct_abstention": true
+      },
+      "topic_keywords": {
+        "top3": [
+          "mixed"
+        ],
+        "direct": [],
+        "hit": false,
+        "reciprocal_rank": 0,
+        "supported_decision": false,
+        "unsupported": [],
+        "correct_abstention": true
+      },
+      "proposed": {
+        "top3": [
+          "mixed"
+        ],
+        "direct": [],
+        "hit": false,
+        "reciprocal_rank": 0,
+        "supported_decision": false,
+        "unsupported": [],
+        "correct_abstention": true
+      }
+    }
+  ]
+}

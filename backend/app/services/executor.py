@@ -77,7 +77,7 @@ async def execute(service, run_id, retry_ids, token):
             try:
                 result, _ = await asyncio.wait_for(asyncio.to_thread(service.registry.execute, task['tool_name'], args), timeout=max(0.01, remaining()))
                 # Imported bundles have their own typed validation and provenance contract.
-                if result.get('is_demo') is False and result.get('data_label') != 'IMPORTED PUBLIC SOURCES':
+                if result.get('is_demo') is False and result.get('data_label') not in {'IMPORTED PUBLIC SOURCES', 'USER UPLOADED REPORT'}:
                     result['quality'] = assess_evidence(task['tool_name'], result, task['arguments']['symbol'])
             except asyncio.TimeoutError:
                 error = 'Tool timed out; underlying read-only request may finish without being committed'

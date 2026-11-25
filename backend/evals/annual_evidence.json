@@ -1,0 +1,325 @@
+[
+  {
+    "id": "public-revenue",
+    "topic": "revenue",
+    "gold": [
+      "public-p9"
+    ],
+    "candidates": [
+      {
+        "id": "noise-0",
+        "text": "营业收入 营收 净利润 盈利 经营情况。",
+        "symbol": "600519.SH",
+        "year": 2025,
+        "title": "主要会计数据"
+      },
+      {
+        "id": "noise-1",
+        "text": "营业收入 营收 净利润 盈利 经营情况。",
+        "symbol": "600519.SH",
+        "year": 2025,
+        "title": "主要会计数据"
+      },
+      {
+        "id": "noise-2",
+        "text": "营业收入 营收 净利润 盈利 经营情况。",
+        "symbol": "600519.SH",
+        "year": 2025,
+        "title": "主要会计数据"
+      },
+      {
+        "id": "public-p9",
+        "text": "营业收入变动原因说明：主要是酱香系列酒产品结构调整影响。",
+        "symbol": "600519.SH",
+        "year": 2025,
+        "title": "贵州茅台 2025 年年度报告 · 主营业务分析"
+      }
+    ],
+    "symbol": "600519.SH",
+    "year": 2025
+  },
+  {
+    "id": "public-background-only",
+    "topic": "revenue",
+    "gold": [],
+    "candidates": [
+      {
+        "id": "public-p25",
+        "text": "公司境外收入 129,641,258 千元，占本期营业收入 30.60%。",
+        "symbol": "300750.SZ",
+        "year": 2025,
+        "title": "宁德时代 2025 年年度报告 · 收入与成本"
+      }
+    ],
+    "symbol": "300750.SZ",
+    "year": 2025
+  },
+  {
+    "id": "profit-vs-revenue",
+    "topic": "profit",
+    "gold": [
+      "profit"
+    ],
+    "candidates": [
+      {
+        "id": "noise-0",
+        "text": "营业收入 营收 净利润 盈利 经营情况。",
+        "symbol": "600519.SH",
+        "year": 2025,
+        "title": "主要会计数据"
+      },
+      {
+        "id": "noise-1",
+        "text": "营业收入 营收 净利润 盈利 经营情况。",
+        "symbol": "600519.SH",
+        "year": 2025,
+        "title": "主要会计数据"
+      },
+      {
+        "id": "noise-2",
+        "text": "营业收入 营收 净利润 盈利 经营情况。",
+        "symbol": "600519.SH",
+        "year": 2025,
+        "title": "主要会计数据"
+      },
+      {
+        "id": "rev",
+        "text": "营业收入增加，主要是销量增加。",
+        "symbol": "600519.SH",
+        "year": 2025,
+        "title": "主要会计数据"
+      },
+      {
+        "id": "profit",
+        "text": "归母净利润下降，主要由于成本增加。",
+        "symbol": "600519.SH",
+        "year": 2025,
+        "title": "主要会计数据"
+      }
+    ],
+    "symbol": "600519.SH",
+    "year": 2025
+  },
+  {
+    "id": "wrong-period",
+    "topic": "revenue",
+    "gold": [],
+    "candidates": [
+      {
+        "id": "noise-0",
+        "text": "营业收入 营收 净利润 盈利 经营情况。",
+        "symbol": "600519.SH",
+        "year": 2025,
+        "title": "主要会计数据"
+      },
+      {
+        "id": "noise-1",
+        "text": "营业收入 营收 净利润 盈利 经营情况。",
+        "symbol": "600519.SH",
+        "year": 2025,
+        "title": "主要会计数据"
+      },
+      {
+        "id": "noise-2",
+        "text": "营业收入 营收 净利润 盈利 经营情况。",
+        "symbol": "600519.SH",
+        "year": 2025,
+        "title": "主要会计数据"
+      },
+      {
+        "id": "old",
+        "text": "营业收入下降，主要由于需求减少。",
+        "symbol": "600519.SH",
+        "year": 2024,
+        "title": "主要会计数据"
+      }
+    ],
+    "symbol": "600519.SH",
+    "year": 2025
+  },
+  {
+    "id": "wrong-company",
+    "topic": "revenue",
+    "gold": [],
+    "candidates": [
+      {
+        "id": "noise-0",
+        "text": "营业收入 营收 净利润 盈利 经营情况。",
+        "symbol": "600519.SH",
+        "year": 2025,
+        "title": "主要会计数据"
+      },
+      {
+        "id": "noise-1",
+        "text": "营业收入 营收 净利润 盈利 经营情况。",
+        "symbol": "600519.SH",
+        "year": 2025,
+        "title": "主要会计数据"
+      },
+      {
+        "id": "noise-2",
+        "text": "营业收入 营收 净利润 盈利 经营情况。",
+        "symbol": "600519.SH",
+        "year": 2025,
+        "title": "主要会计数据"
+      },
+      {
+        "id": "other",
+        "text": "营业收入下降，主要由于需求减少。",
+        "symbol": "300750.SZ",
+        "year": 2025,
+        "title": "主要会计数据"
+      }
+    ],
+    "symbol": "600519.SH",
+    "year": 2025
+  },
+  {
+    "id": "heading-only",
+    "topic": "revenue",
+    "gold": [],
+    "candidates": [
+      {
+        "id": "heading",
+        "text": "营业收入变动原因说明：",
+        "symbol": "600519.SH",
+        "year": 2025,
+        "title": "主要会计数据"
+      },
+      {
+        "id": "background",
+        "text": "营业收入下降 8%。",
+        "symbol": "600519.SH",
+        "year": 2025,
+        "title": "主要会计数据"
+      }
+    ],
+    "symbol": "600519.SH",
+    "year": 2025
+  },
+  {
+    "id": "no-corpus",
+    "topic": "profit",
+    "gold": [],
+    "candidates": [],
+    "symbol": "600519.SH",
+    "year": 2025
+  },
+  {
+    "id": "metric-mismatch",
+    "topic": "profit",
+    "gold": [],
+    "candidates": [
+      {
+        "id": "revenue",
+        "text": "营业收入下降，主要是销量减少。",
+        "symbol": "600519.SH",
+        "year": 2025,
+        "title": "主要会计数据"
+      }
+    ],
+    "symbol": "600519.SH",
+    "year": 2025
+  },
+  {
+    "id": "correct-and-wrong-period",
+    "topic": "revenue",
+    "gold": [
+      "current"
+    ],
+    "candidates": [
+      {
+        "id": "noise-0",
+        "text": "营业收入 营收 净利润 盈利 经营情况。",
+        "symbol": "600519.SH",
+        "year": 2025,
+        "title": "主要会计数据"
+      },
+      {
+        "id": "noise-1",
+        "text": "营业收入 营收 净利润 盈利 经营情况。",
+        "symbol": "600519.SH",
+        "year": 2025,
+        "title": "主要会计数据"
+      },
+      {
+        "id": "noise-2",
+        "text": "营业收入 营收 净利润 盈利 经营情况。",
+        "symbol": "600519.SH",
+        "year": 2025,
+        "title": "主要会计数据"
+      },
+      {
+        "id": "current",
+        "text": "营业收入下降，主要是渠道调整。",
+        "symbol": "600519.SH",
+        "year": 2025,
+        "title": "主要会计数据"
+      },
+      {
+        "id": "prior",
+        "text": "营业收入下降，主要是成本变化。",
+        "symbol": "600519.SH",
+        "year": 2024,
+        "title": "主要会计数据"
+      }
+    ],
+    "symbol": "600519.SH",
+    "year": 2025
+  },
+  {
+    "id": "causal-alias",
+    "topic": "profit",
+    "gold": [
+      "alias"
+    ],
+    "candidates": [
+      {
+        "id": "noise-0",
+        "text": "营业收入 营收 净利润 盈利 经营情况。",
+        "symbol": "600519.SH",
+        "year": 2025,
+        "title": "主要会计数据"
+      },
+      {
+        "id": "noise-1",
+        "text": "营业收入 营收 净利润 盈利 经营情况。",
+        "symbol": "600519.SH",
+        "year": 2025,
+        "title": "主要会计数据"
+      },
+      {
+        "id": "noise-2",
+        "text": "营业收入 营收 净利润 盈利 经营情况。",
+        "symbol": "600519.SH",
+        "year": 2025,
+        "title": "主要会计数据"
+      },
+      {
+        "id": "alias",
+        "text": "归母净利润下滑，主要受原材料价格上涨影响。",
+        "symbol": "600519.SH",
+        "year": 2025,
+        "title": "主要会计数据"
+      }
+    ],
+    "symbol": "600519.SH",
+    "year": 2025
+  },
+  {
+    "id": "cross-metric-clause",
+    "symbol": "600519.SH",
+    "year": 2025,
+    "topic": "revenue",
+    "gold": [],
+    "candidates": [
+      {
+        "id": "mixed",
+        "symbol": "600519.SH",
+        "year": 2025,
+        "title": "经营情况",
+        "text": "营业收入下滑，归母净利润下降主要由于成本增加。"
+      }
+    ]
+  }
+]

@@ -1,0 +1,18 @@
+{
+  "counts": {
+    "sft": 28,
+    "rm": 28,
+    "review": 28
+  },
+  "strata": {
+    "legacy": 4,
+    "direct_revenue": 6,
+    "direct_profit": 6,
+    "numeric_only": 6,
+    "cross_metric": 6
+  },
+  "answerable": 14,
+  "provenance": "synthetic",
+  "human_review": "pending",
+  "excluded_evaluation_cases": 27
+}

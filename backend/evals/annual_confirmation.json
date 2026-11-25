@@ -1,0 +1,538 @@
+[
+  {
+    "id": "check-revenue",
+    "symbol": "600519.SH",
+    "year": 2025,
+    "topic": "revenue",
+    "gold": [
+      "H1"
+    ],
+    "candidates": [
+      {
+        "id": "H1",
+        "text": "营业收入上升，主要系新店销售增加。",
+        "symbol": "600519.SH",
+        "year": 2025,
+        "title": "变动分析"
+      }
+    ]
+  },
+  {
+    "id": "check-profit",
+    "symbol": "600519.SH",
+    "year": 2025,
+    "topic": "profit",
+    "gold": [
+      "H1"
+    ],
+    "candidates": [
+      {
+        "id": "H1",
+        "text": "归母净利润增加，主要是物流成本降低。",
+        "symbol": "600519.SH",
+        "year": 2025,
+        "title": "变动分析"
+      }
+    ]
+  },
+  {
+    "id": "check-numbers",
+    "symbol": "600519.SH",
+    "year": 2025,
+    "topic": "revenue",
+    "gold": [],
+    "candidates": [
+      {
+        "id": "H1",
+        "text": "本年度营业收入上升 6%，归母净利润降低 2%。",
+        "symbol": "600519.SH",
+        "year": 2025,
+        "title": "变动分析"
+      }
+    ]
+  },
+  {
+    "id": "check-metric",
+    "symbol": "600519.SH",
+    "year": 2025,
+    "topic": "profit",
+    "gold": [],
+    "candidates": [
+      {
+        "id": "H1",
+        "text": "营业收入下降，主要是订单延后。",
+        "symbol": "600519.SH",
+        "year": 2025,
+        "title": "变动分析"
+      }
+    ]
+  },
+  {
+    "id": "check-v2-1",
+    "symbol": "300750.SZ",
+    "year": 2024,
+    "topic": "revenue",
+    "gold": [
+      "H1"
+    ],
+    "candidates": [
+      {
+        "id": "N0",
+        "text": "营业收入 营收 净利润 盈利 经营情况，财务附表第 211 项。",
+        "symbol": "300750.SZ",
+        "year": 2024,
+        "title": "经营概况"
+      },
+      {
+        "id": "N1",
+        "text": "营业收入 营收 净利润 盈利 经营情况，财务附表第 212 项。",
+        "symbol": "300750.SZ",
+        "year": 2024,
+        "title": "经营概况"
+      },
+      {
+        "id": "N2",
+        "text": "营业收入 营收 净利润 盈利 经营情况，财务附表第 213 项。",
+        "symbol": "300750.SZ",
+        "year": 2024,
+        "title": "经营概况"
+      },
+      {
+        "id": "H1",
+        "text": "营业收入上升，主要因为设备租用量增加。",
+        "symbol": "300750.SZ",
+        "year": 2024,
+        "title": "经营讨论 · 主营业务分析"
+      }
+    ],
+    "stratum": "direct"
+  },
+  {
+    "id": "check-v2-2",
+    "symbol": "600519.SH",
+    "year": 2024,
+    "topic": "profit",
+    "gold": [
+      "H1"
+    ],
+    "candidates": [
+      {
+        "id": "N0",
+        "text": "营业收入 营收 净利润 盈利 经营情况，财务附表第 221 项。",
+        "symbol": "600519.SH",
+        "year": 2024,
+        "title": "经营概况"
+      },
+      {
+        "id": "N1",
+        "text": "营业收入 营收 净利润 盈利 经营情况，财务附表第 222 项。",
+        "symbol": "600519.SH",
+        "year": 2024,
+        "title": "经营概况"
+      },
+      {
+        "id": "N2",
+        "text": "营业收入 营收 净利润 盈利 经营情况，财务附表第 223 项。",
+        "symbol": "600519.SH",
+        "year": 2024,
+        "title": "经营概况"
+      },
+      {
+        "id": "H1",
+        "text": "归母净利润减少，主要是税收优惠到期。",
+        "symbol": "600519.SH",
+        "year": 2024,
+        "title": "经营讨论 · 主营业务分析"
+      }
+    ],
+    "stratum": "direct"
+  },
+  {
+    "id": "check-v2-3",
+    "symbol": "300750.SZ",
+    "year": 2025,
+    "topic": "revenue",
+    "gold": [
+      "H1"
+    ],
+    "candidates": [
+      {
+        "id": "N0",
+        "text": "营业收入 营收 净利润 盈利 经营情况，财务附表第 231 项。",
+        "symbol": "300750.SZ",
+        "year": 2025,
+        "title": "经营概况"
+      },
+      {
+        "id": "N1",
+        "text": "营业收入 营收 净利润 盈利 经营情况，财务附表第 232 项。",
+        "symbol": "300750.SZ",
+        "year": 2025,
+        "title": "经营概况"
+      },
+      {
+        "id": "N2",
+        "text": "营业收入 营收 净利润 盈利 经营情况，财务附表第 233 项。",
+        "symbol": "300750.SZ",
+        "year": 2025,
+        "title": "经营概况"
+      },
+      {
+        "id": "H1",
+        "text": "营业收入变动原因说明：本期线上销售扩大。",
+        "symbol": "300750.SZ",
+        "year": 2025,
+        "title": "经营讨论 · 主营业务分析"
+      }
+    ],
+    "stratum": "direct"
+  },
+  {
+    "id": "check-v2-4",
+    "symbol": "600519.SH",
+    "year": 2024,
+    "topic": "profit",
+    "gold": [
+      "H1"
+    ],
+    "candidates": [
+      {
+        "id": "N0",
+        "text": "营业收入 营收 净利润 盈利 经营情况，财务附表第 241 项。",
+        "symbol": "600519.SH",
+        "year": 2024,
+        "title": "经营概况"
+      },
+      {
+        "id": "N1",
+        "text": "营业收入 营收 净利润 盈利 经营情况，财务附表第 242 项。",
+        "symbol": "600519.SH",
+        "year": 2024,
+        "title": "经营概况"
+      },
+      {
+        "id": "N2",
+        "text": "营业收入 营收 净利润 盈利 经营情况，财务附表第 243 项。",
+        "symbol": "600519.SH",
+        "year": 2024,
+        "title": "经营概况"
+      },
+      {
+        "id": "H1",
+        "text": "归母净利润增长，主要系利息支出下降。",
+        "symbol": "600519.SH",
+        "year": 2024,
+        "title": "经营讨论 · 主营业务分析"
+      }
+    ],
+    "stratum": "direct"
+  },
+  {
+    "id": "check-v2-5",
+    "symbol": "300750.SZ",
+    "year": 2024,
+    "topic": "revenue",
+    "gold": [
+      "H1"
+    ],
+    "candidates": [
+      {
+        "id": "N0",
+        "text": "营业收入 营收 净利润 盈利 经营情况，财务附表第 251 项。",
+        "symbol": "300750.SZ",
+        "year": 2024,
+        "title": "经营概况"
+      },
+      {
+        "id": "N1",
+        "text": "营业收入 营收 净利润 盈利 经营情况，财务附表第 252 项。",
+        "symbol": "300750.SZ",
+        "year": 2024,
+        "title": "经营概况"
+      },
+      {
+        "id": "N2",
+        "text": "营业收入 营收 净利润 盈利 经营情况，财务附表第 253 项。",
+        "symbol": "300750.SZ",
+        "year": 2024,
+        "title": "经营概况"
+      },
+      {
+        "id": "H1",
+        "text": "新增配送网点推动了营业收入增长。",
+        "symbol": "300750.SZ",
+        "year": 2024,
+        "title": "经营讨论 · 主营业务分析"
+      }
+    ],
+    "stratum": "reverse_causality"
+  },
+  {
+    "id": "check-v2-6",
+    "symbol": "600519.SH",
+    "year": 2025,
+    "topic": "profit",
+    "gold": [
+      "H1"
+    ],
+    "candidates": [
+      {
+        "id": "N0",
+        "text": "营业收入 营收 净利润 盈利 经营情况，财务附表第 261 项。",
+        "symbol": "600519.SH",
+        "year": 2025,
+        "title": "经营概况"
+      },
+      {
+        "id": "N1",
+        "text": "营业收入 营收 净利润 盈利 经营情况，财务附表第 262 项。",
+        "symbol": "600519.SH",
+        "year": 2025,
+        "title": "经营概况"
+      },
+      {
+        "id": "N2",
+        "text": "营业收入 营收 净利润 盈利 经营情况，财务附表第 263 项。",
+        "symbol": "600519.SH",
+        "year": 2025,
+        "title": "经营概况"
+      },
+      {
+        "id": "H1",
+        "text": "美元负债重估使归母净利润下降。",
+        "symbol": "600519.SH",
+        "year": 2025,
+        "title": "经营讨论 · 主营业务分析"
+      }
+    ],
+    "stratum": "reverse_causality"
+  },
+  {
+    "id": "check-v2-7",
+    "symbol": "300750.SZ",
+    "year": 2024,
+    "topic": "revenue",
+    "gold": [],
+    "candidates": [
+      {
+        "id": "N0",
+        "text": "营业收入 营收 净利润 盈利 经营情况，财务附表第 271 项。",
+        "symbol": "300750.SZ",
+        "year": 2024,
+        "title": "经营概况"
+      },
+      {
+        "id": "N1",
+        "text": "营业收入 营收 净利润 盈利 经营情况，财务附表第 272 项。",
+        "symbol": "300750.SZ",
+        "year": 2024,
+        "title": "经营概况"
+      },
+      {
+        "id": "N2",
+        "text": "营业收入 营收 净利润 盈利 经营情况，财务附表第 273 项。",
+        "symbol": "300750.SZ",
+        "year": 2024,
+        "title": "经营概况"
+      },
+      {
+        "id": "H1",
+        "text": "营收占比由六成降至五成。",
+        "symbol": "300750.SZ",
+        "year": 2024,
+        "title": "经营讨论 · 主营业务分析"
+      }
+    ],
+    "stratum": "numeric_only"
+  },
+  {
+    "id": "check-v2-8",
+    "symbol": "600519.SH",
+    "year": 2024,
+    "topic": "profit",
+    "gold": [],
+    "candidates": [
+      {
+        "id": "N0",
+        "text": "营业收入 营收 净利润 盈利 经营情况，财务附表第 281 项。",
+        "symbol": "600519.SH",
+        "year": 2024,
+        "title": "经营概况"
+      },
+      {
+        "id": "N1",
+        "text": "营业收入 营收 净利润 盈利 经营情况，财务附表第 282 项。",
+        "symbol": "600519.SH",
+        "year": 2024,
+        "title": "经营概况"
+      },
+      {
+        "id": "N2",
+        "text": "营业收入 营收 净利润 盈利 经营情况，财务附表第 283 项。",
+        "symbol": "600519.SH",
+        "year": 2024,
+        "title": "经营概况"
+      },
+      {
+        "id": "H1",
+        "text": "营业收入下滑，主要由于服务客单价下降。",
+        "symbol": "600519.SH",
+        "year": 2024,
+        "title": "经营讨论 · 主营业务分析"
+      }
+    ],
+    "stratum": "cross_metric"
+  },
+  {
+    "id": "check-v2-9",
+    "symbol": "300750.SZ",
+    "year": 2025,
+    "topic": "revenue",
+    "gold": [],
+    "candidates": [
+      {
+        "id": "N0",
+        "text": "营业收入 营收 净利润 盈利 经营情况，财务附表第 291 项。",
+        "symbol": "300750.SZ",
+        "year": 2025,
+        "title": "经营概况"
+      },
+      {
+        "id": "N1",
+        "text": "营业收入 营收 净利润 盈利 经营情况，财务附表第 292 项。",
+        "symbol": "300750.SZ",
+        "year": 2025,
+        "title": "经营概况"
+      },
+      {
+        "id": "N2",
+        "text": "营业收入 营收 净利润 盈利 经营情况，财务附表第 293 项。",
+        "symbol": "300750.SZ",
+        "year": 2025,
+        "title": "经营概况"
+      },
+      {
+        "id": "H1",
+        "text": "营业收入变化原因说明：",
+        "symbol": "300750.SZ",
+        "year": 2025,
+        "title": "经营讨论 · 主营业务分析"
+      }
+    ],
+    "stratum": "heading"
+  },
+  {
+    "id": "check-v2-10",
+    "symbol": "600519.SH",
+    "year": 2024,
+    "topic": "profit",
+    "gold": [],
+    "candidates": [
+      {
+        "id": "N0",
+        "text": "营业收入 营收 净利润 盈利 经营情况，财务附表第 301 项。",
+        "symbol": "600519.SH",
+        "year": 2024,
+        "title": "经营概况"
+      },
+      {
+        "id": "N1",
+        "text": "营业收入 营收 净利润 盈利 经营情况，财务附表第 302 项。",
+        "symbol": "600519.SH",
+        "year": 2024,
+        "title": "经营概况"
+      },
+      {
+        "id": "N2",
+        "text": "营业收入 营收 净利润 盈利 经营情况，财务附表第 303 项。",
+        "symbol": "600519.SH",
+        "year": 2024,
+        "title": "经营概况"
+      },
+      {
+        "id": "H1",
+        "text": "归母净利润变动原因尚待核实。",
+        "symbol": "600519.SH",
+        "year": 2024,
+        "title": "经营讨论 · 主营业务分析"
+      }
+    ],
+    "stratum": "unknown"
+  },
+  {
+    "id": "check-v2-11",
+    "symbol": "300750.SZ",
+    "year": 2024,
+    "topic": "revenue",
+    "gold": [],
+    "candidates": [
+      {
+        "id": "N0",
+        "text": "营业收入 营收 净利润 盈利 经营情况，财务附表第 311 项。",
+        "symbol": "300750.SZ",
+        "year": 2024,
+        "title": "经营概况"
+      },
+      {
+        "id": "N1",
+        "text": "营业收入 营收 净利润 盈利 经营情况，财务附表第 312 项。",
+        "symbol": "300750.SZ",
+        "year": 2024,
+        "title": "经营概况"
+      },
+      {
+        "id": "N2",
+        "text": "营业收入 营收 净利润 盈利 经营情况，财务附表第 313 项。",
+        "symbol": "300750.SZ",
+        "year": 2024,
+        "title": "经营概况"
+      },
+      {
+        "id": "H1",
+        "text": "营收变化主要是收入确认时间调整。",
+        "symbol": "300750.SZ",
+        "year": 2023,
+        "title": "经营讨论 · 主营业务分析"
+      }
+    ],
+    "stratum": "wrong_year"
+  },
+  {
+    "id": "check-v2-12",
+    "symbol": "600519.SH",
+    "year": 2025,
+    "topic": "profit",
+    "gold": [],
+    "candidates": [
+      {
+        "id": "N0",
+        "text": "营业收入 营收 净利润 盈利 经营情况，财务附表第 321 项。",
+        "symbol": "600519.SH",
+        "year": 2025,
+        "title": "经营概况"
+      },
+      {
+        "id": "N1",
+        "text": "营业收入 营收 净利润 盈利 经营情况，财务附表第 322 项。",
+        "symbol": "600519.SH",
+        "year": 2025,
+        "title": "经营概况"
+      },
+      {
+        "id": "N2",
+        "text": "营业收入 营收 净利润 盈利 经营情况，财务附表第 323 项。",
+        "symbol": "600519.SH",
+        "year": 2025,
+        "title": "经营概况"
+      },
+      {
+        "id": "H1",
+        "text": "归母净利润下降，主要由于租赁费用增加。",
+        "symbol": "000858.SZ",
+        "year": 2025,
+        "title": "经营讨论 · 主营业务分析"
+      }
+    ],
+    "stratum": "wrong_symbol"
+  }
+]

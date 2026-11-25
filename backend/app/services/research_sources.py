@@ -81,6 +81,7 @@ class CashRow(SourceRow):
 
 class FilingRow(SourceRow):
     title: str = Field(min_length=1, max_length=200)
+    fiscal_year: int | None = Field(default=None, ge=2020, le=2030)
     page: int = Field(ge=1)
     text: str = Field(min_length=1, max_length=12000)
 
@@ -111,6 +112,7 @@ class SourceArgs(StockArgs):
 
 class FilingArgs(SourceArgs):
     query: str = Field(default='', max_length=1000)
+    fiscal_year: int | None = Field(default=None, ge=2020, le=2030)
     limit: int = Field(default=5, ge=1, le=10)
 
 
@@ -119,7 +121,13 @@ def load_bundle(directory: Path, symbol: str):
     target = (directory / f'{symbol}.json').resolve()
     if target.parent != directory.resolve():
         raise ValueError('Invalid source path')
-    raw = target.read_bytes()
+    try:
+        raw = target.read_bytes()
+    except FileNotFoundError:
+        backend_root = Path(__file__).resolve().parents[2]
+        if directory.resolve() != (backend_root / 'data' / 'research_sources').resolve():
+            raise
+        raw = (backend_root.parent / 'docs' / 'annual-report-samples' / target.name).read_bytes()
     if len(raw) > 3 * 1024 * 1024:
         raise ValueError('Source bundle exceeds 3 MB')
     bundle = SourceBundle.model_validate_json(raw)
@@ -133,11 +141,15 @@ def available_sources(directory: Path, symbol: str):
         bundle, revision = load_bundle(directory, symbol)
     except (OSError, ValueError):
         return {}
-    return {tool: {'revision': revision, 'rows': len(getattr(bundle, key))}
+    return {tool: {'revision': revision, 'rows': len(getattr(bundle, key)),
+                   **({'fiscal_years': sorted({r.fiscal_year for r in bundle.filings if r.fiscal_year is not None})}
+                      if key == 'filings' else {})}
             for tool, (key, _) in SUPPLEMENT_TOOLS.items() if getattr(bundle, key)}
 
 
 def register_source_tools(registry, directory: Path):
+    from app.services.annual_evidence import ranked_passages, register_upload_tool
+    register_upload_tool(registry)
     def handler_for(name, key):
         def handler(args):
             try:
@@ -151,22 +163,37 @@ def register_source_tools(registry, directory: Path):
                 raise ToolExecutionError('Requested dataset is not available in the imported bundle', retryable=False)
             total_rows = len(rows)
             if key == 'filings':
+                if args.fiscal_year is not None:
+                    rows = [row for row in rows if row.fiscal_year == args.fiscal_year]
                 terms = set(re.findall(r'[a-zA-Z0-9]{2,}|[\u4e00-\u9fff]{2,}', args.query.lower()))
                 terms |= {term[i:i+2] for term in list(terms) if re.search(r'[\u4e00-\u9fff]', term) for i in range(len(term)-1)}
                 def score(row):
-                    text = (row.title + ' ' + row.text).lower()
-                    return sum(text.count(term) for term in terms)
-                rows = sorted(rows, key=lambda row: (score(row), row.as_of), reverse=True)
-                rows = [row for row in rows if not terms or score(row) > 0][:args.limit]
+                    if args.fiscal_year is None:
+                        text = (row.title + ' ' + row.text).lower()
+                        return sum(text.count(term) for term in terms)
+                    text = row.text.lower()
+                    return sum((2 if len(term) > 2 else 1) for term in terms if term in text)
+                ranked = sorted(((score(row), row.as_of, row) for row in rows),
+                                key=lambda item: (item[0], item[1]), reverse=True)
+                if args.fiscal_year is None:
+                    rows = [row for relevance, _, row in ranked if not terms or relevance > 0][:args.limit]
+                else:
+                    records = ranked_passages([row.model_dump() for row in rows], args.limit)
+                    rows = [FilingRow.model_validate(row) for row in {
+                        (row["source"], row["page"], row["text"]): row
+                        for group in records.values() for row in group
+                    }.values()]
                 if not rows:
                     raise ToolExecutionError('No relevant filing passages found in the imported corpus', retryable=False)
             result = {'symbol': args.symbol, 'available': True, 'is_demo': False,
                       'data_label': 'IMPORTED PUBLIC SOURCES', 'source': str(rows[0].source),
                       'retrieved_at': datetime.now(timezone.utc).isoformat(), 'currency': 'CNY',
                       'revision': revision, 'dataset': key, 'records': [r.model_dump(mode='json') for r in rows],
-                      'total_imported_rows': total_rows, 'retrieval_method': 'keyword' if key == 'filings' else 'all_rows',
+                      'total_imported_rows': total_rows, 'retrieval_method': ('topic_and_section' if args.fiscal_year is not None else 'keyword') if key == 'filings' else 'all_rows',
                       'quality': {'status': 'WARN', 'usable': True, 'issues': [
                           {'code': 'IMPORTED_SOURCE_NOT_VERIFIED', 'message': '已校验结构与口径；导入内容及来源真实性仍需人工核验。', 'severity': 'WARN'}]}}
+            if key == 'filings' and args.fiscal_year is not None:
+                result['fiscal_year'] = args.fiscal_year
             if key == 'valuation_history':
                 values = [r.pe_ttm for r in rows]
                 result['statistics'] = {'count': len(values), 'min_pe_ttm': min(values), 'max_pe_ttm': max(values)}

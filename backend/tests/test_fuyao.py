@@ -19,6 +19,11 @@ def setup_provider(monkeypatch, fail=False, expected_symbol="600519.SH"):
             rows = [{"date_ms": 1735689600000, "close_price": 1400}]
         elif "income-statements" in request.url.path:
             rows = [{"fiscal_year": 2025, "period_end_ms": 1767139200000, "operating_income": 1000000000, "net_profit": 500000000, "parent_holder_net_profit": 400000000}]
+        elif "cash-flow-statements" in request.url.path:
+            rows = [{"thscode": expected_symbol, "period_end_ms": 1767139200000, "act_cash_flow_net": 450000000}]
+        elif "balance-sheets" in request.url.path:
+            rows = [{"thscode": expected_symbol, "period_end_ms": 1767139200000,
+                     "assets_total": 2000000000, "total_debt": 500000000, "holder_equity_total": 1500000000}]
         elif "valuations" in request.url.path:
             rows = [{"pe_ttm": 20, "pb_mrq": 6}]
         else:

@@ -155,6 +155,20 @@
           "title": "Title",
           "type": "string"
         },
+        "fiscal_year": {
+          "anyOf": [
+            {
+              "maximum": 2030,
+              "minimum": 2020,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Fiscal Year"
+        },
         "page": {
           "minimum": 1,
           "title": "Page",
