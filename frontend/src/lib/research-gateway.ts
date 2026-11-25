@@ -146,6 +146,10 @@ export const researchApi = {
   attachAnnualReport: (id: string, payload: {filename: string; content_base64: string; plan_version: number; expected_updated_at: string; confirmed: boolean; page_offset: number}) =>
     request<ApiRun>(`/api/v1/runs/${encodeURIComponent(id)}/annual-report`, { method: 'POST', body: JSON.stringify(payload) }),
   getRunBundle: loadRunBundle,
+  revisePlan: (id: string, planVersion: number, updatedAt: string, goal: string, excludedTools: string[]) => request<ApiRun>(
+    `/api/v1/runs/${encodeURIComponent(id)}/revise-plan`,
+    { method: 'POST', body: JSON.stringify({ plan_version: planVersion, expected_updated_at: updatedAt, goal, excluded_tools: excludedTools }) },
+  ),
   approve: (id: string, planVersion: number, allowedTools: string[], signal?: AbortSignal) => request<ApiRun>(`/api/v1/runs/${id}/approve`, { method: 'POST', body: JSON.stringify({ plan_version: planVersion, allowed_tools: allowedTools }), signal }),
   reject: (id: string, planVersion: number, reason: string, signal?: AbortSignal) => request<ApiRun>(`/api/v1/runs/${id}/reject`, { method: 'POST', body: JSON.stringify({ plan_version: planVersion, reason }), signal }),
   resume: (id: string, signal?: AbortSignal) => request<ApiRun>(`/api/v1/runs/${id}/resume`, { method: 'POST', signal }),

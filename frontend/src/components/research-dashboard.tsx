@@ -182,6 +182,19 @@ export function ResearchDashboard() {
     setThreads(list => [next, ...list]); setActiveId(id); setGoal(''); setSidebarOpen(false);
   };
   const setTab = (tab: WorkspaceTab) => updateById(active.id, thread => ({ ...thread, tab }));
+  const revisePlan = async (nextGoal: string, excludedTools: string[]) => {
+    if (!active.remoteRunId || !active.planVersion || !active.remoteUpdatedAt) return '请刷新计划后再试。';
+    updateById(active.id, thread => ({ ...thread, loading: true }));
+    try {
+      const result = await researchApi.revisePlan(active.remoteRunId, active.planVersion, active.remoteUpdatedAt, nextGoal, excludedTools);
+      if (!result.ok) return result.error;
+      if (!await refreshRun(active.remoteRunId, active.id)) return '新版已保存，请刷新查看。';
+      setExpanded(null);
+      return null;
+    } finally {
+      updateById(active.id, thread => ({ ...thread, loading: false }));
+    }
+  };
   const apiEvidence = mode === 'api' ? active.apiEvidence?.find(item => item.id === evidenceId) : undefined;
   const selectedEvidence = mode === 'api' ? apiEvidence : evidence.find(item => item.id === evidenceId);
 
@@ -195,7 +208,7 @@ export function ResearchDashboard() {
         <nav className="tabs" aria-label="工作区标签">{([['Research', BarChart3], ['Plan', ListChecks], ['Trace', ScrollText]] as const).filter(([tab])=>!documents.hasDocuments||tab==='Research').map(([tab, Icon]) => <button key={tab} data-testid={`tab-${tab.toLowerCase()}`} className={(documents.hasDocuments||active.tab === tab) ? 'active' : ''} onClick={() => setTab(tab)}><Icon />{documents.hasDocuments?'资料对话':tab}{tab === 'Plan' && active.status === 'approval' && <span className="tab-alert">1</span>}</button>)}</nav>
         <div className="tab-content">
           {(active.tab === 'Research'||documents.hasDocuments) && <>{documents.messages}{!documents.hasDocuments&&<><FinancialMetrics data={data} state={active.loading ? 'loading' : data ? 'ready' : 'empty'} /><FinancialCharts data={data} state={active.loading ? 'loading' : data ? 'ready' : 'empty'} /><ResearchReport thread={active} data={data} onEvidence={setEvidenceId} mode={mode} review={mode === "api" && <ResearchReview key={active.remoteRunId ?? active.id} thread={active} onRefresh={() => active.remoteRunId ? refreshRun(active.remoteRunId, active.id) : Promise.resolve()} />} /></>}</>}
-          {!documents.hasDocuments&&active.tab === 'Plan' && <ResearchPlan thread={active} expanded={expanded} setExpanded={setExpanded} onAction={dispatch} mode={mode} />}
+          {!documents.hasDocuments&&active.tab === 'Plan' && <ResearchPlan thread={active} expanded={expanded} setExpanded={setExpanded} onAction={dispatch} onRevise={revisePlan} mode={mode} />}
           {!documents.hasDocuments&&active.tab === 'Trace' && <ExecutionTrace thread={active} />}
         </div>
       </div>

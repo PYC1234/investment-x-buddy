@@ -9,7 +9,7 @@ import httpx
 
 from app.core.config import Settings, get_settings
 from app.core.errors import AppError
-from app.schemas.research import ApprovalRequest, CreateRunRequest, RejectRequest, RetryFailedRequest, ResearchPlan
+from app.schemas.research import ApprovalRequest, CreateRunRequest, RejectRequest, RetryFailedRequest, ResearchPlan, RevisePlanRequest
 from app.services.planner import DeepSeekPlanner, FixturePlanner, Planner
 from app.services.store import SQLiteStore
 from app.services.evidence_quality import assess_evidence
@@ -66,59 +66,10 @@ class RunService:
             self.save_memory(thread_id, "research_preferences", request.preferences)
         self._event(run_id, "run.created", {"status": "PLANNING"})
         preferences = self.get_memory(thread_id).get("research_preferences", {})
-        try:
-            from app.services.annual_update import AnnualScopeError, annual_update_year, build_annual_update
-            from app.schemas.research import PlannedTask
-            from app.services.planner import PlanResult
-            from app.services.official_filings import OFFICIAL_FILING_TOOL
+        from app.services.annual_update import AnnualScopeError
 
-            year = request.annual_scope.fiscal_year if request.annual_scope else annual_update_year(request.goal)
-            if year is None:
-                result = await self.planner.plan(request.goal, preferences)
-                if result.plan.research_type == "profitability":
-                    from app.services.fuyao import FUYAO_STATEMENTS
-                    from app.services.research_sources import SUPPLEMENT_TOOLS
-                    planned = {task.tool_name for task in result.plan.tasks}
-                    labels = {key: label for key, label in SUPPLEMENT_TOOLS.values()}
-                    for name, (_, dataset, _) in FUYAO_STATEMENTS.items():
-                        if name in planned or name not in self.registry.names() or len(result.plan.tasks) >= 8:
-                            continue
-                        label = labels[dataset]
-                        result.plan.tasks.append(PlannedTask(
-                            task_key=f"fuyao_{dataset}", tool_name=name, title=f"年度合并{label}",
-                            arguments={"symbol": resolve_symbol(request.goal)}, rationale=f"从扶摇获取{label}用于盈利质量核验。",
-                        ))
-                        result.plan.scope.append(f"扶摇年度合并{label}")
-                    if set(FUYAO_STATEMENTS) <= {task.tool_name for task in result.plan.tasks}:
-                        result.plan.limitations = ["报表覆盖和年度可比性以工具结果为准；尚未与交易所原文交叉核验。"]
-            else:
-                plan = build_annual_update(request.goal, request.annual_scope.symbol if request.annual_scope else resolve_symbol(request.goal), year,
-                                           self.settings.research_data_dir)
-                result = PlanResult(plan, "annual_update")
-            if result.plan.research_type == "profitability" and OFFICIAL_FILING_TOOL in self.registry.names():
-                financial = next((task for task in result.plan.tasks if task.tool_name == "get_financial_summary"), None)
-                planned = {task.tool_name for task in result.plan.tasks}
-                if (financial and OFFICIAL_FILING_TOOL not in planned
-                        and "search_company_filings" not in planned and len(result.plan.tasks) < 8):
-                    result.plan.tasks.append(PlannedTask(
-                        task_key="official_annual_filing", title="查找同财年官方年报",
-                        tool_name=OFFICIAL_FILING_TOOL, arguments={"symbol": financial.arguments["symbol"], "fiscal_year": year},
-                        depends_on=[financial.task_key] if year is None and financial.task_key else [],
-                        rationale="通过巨潮资讯检索同标的年报，引用支持盈利变化的原文与页码。",
-                    ))
-                    result.plan.scope.append("通过巨潮资讯定位官方年报")
-                    if year is not None:
-                        result.plan.limitations = [
-                            "年报扫描覆盖有限，未找到对应管理层解释时保留缺口。"
-                        ]
-            for task in result.plan.tasks:
-                if task.tool_name == "read_uploaded_annual_report":
-                    raise ValueError("Uploaded PDF evidence requires an owned run and supplemental approval")
-                self.registry.validate(task.tool_name, task.arguments)
-            symbol = request.annual_scope.symbol if request.annual_scope else resolve_symbol(request.goal)
-            for task in result.plan.tasks:
-                if task.arguments.get('symbol') != symbol:
-                    raise ValueError('Plan stock does not match the confirmed research goal')
+        try:
+            result = await self._build_plan(request, preferences)
         except (SymbolResolutionError, AnnualScopeError) as exc:
             self.store.execute("UPDATE runs SET status='FAILED',error=?,updated_at=? WHERE id=?", (str(exc), now_iso(), run_id))
             self._event(run_id, "plan.invalid", {"error": str(exc)})
@@ -149,10 +100,141 @@ class RunService:
         self._save_checkpoint(run_id, "PENDING_APPROVAL")
         return self.get_run(run_id)
 
+    async def _build_plan(self, request: CreateRunRequest, preferences: dict[str, Any]):
+        from app.services.annual_update import annual_update_year, build_annual_update
+        from app.schemas.research import PlannedTask
+        from app.services.planner import PlanResult
+        from app.services.official_filings import OFFICIAL_FILING_TOOL
+
+        year = request.annual_scope.fiscal_year if request.annual_scope else annual_update_year(request.goal)
+        if year is None:
+            result = await self.planner.plan(request.goal, preferences)
+            if result.plan.research_type == "profitability":
+                from app.services.fuyao import FUYAO_STATEMENTS
+                from app.services.research_sources import SUPPLEMENT_TOOLS
+                planned = {task.tool_name for task in result.plan.tasks}
+                labels = {key: label for key, label in SUPPLEMENT_TOOLS.values()}
+                for name, (_, dataset, _) in FUYAO_STATEMENTS.items():
+                    if name in planned or name not in self.registry.names() or len(result.plan.tasks) >= 8:
+                        continue
+                    label = labels[dataset]
+                    result.plan.tasks.append(PlannedTask(
+                        task_key=f"fuyao_{dataset}", tool_name=name, title=f"年度合并{label}",
+                        arguments={"symbol": resolve_symbol(request.goal)}, rationale=f"从扶摇获取{label}用于盈利质量核验。",
+                    ))
+                    result.plan.scope.append(f"扶摇年度合并{label}")
+                if set(FUYAO_STATEMENTS) <= {task.tool_name for task in result.plan.tasks}:
+                    result.plan.limitations = ["报表覆盖和年度可比性以工具结果为准；尚未与交易所原文交叉核验。"]
+        else:
+            plan = build_annual_update(request.goal, request.annual_scope.symbol if request.annual_scope else resolve_symbol(request.goal), year,
+                                       self.settings.research_data_dir)
+            result = PlanResult(plan, "annual_update")
+        if result.plan.research_type == "profitability" and OFFICIAL_FILING_TOOL in self.registry.names():
+            financial = next((task for task in result.plan.tasks if task.tool_name == "get_financial_summary"), None)
+            planned = {task.tool_name for task in result.plan.tasks}
+            if (financial and OFFICIAL_FILING_TOOL not in planned
+                    and "search_company_filings" not in planned and len(result.plan.tasks) < 8):
+                result.plan.tasks.append(PlannedTask(
+                    task_key="official_annual_filing", title="查找同财年官方年报",
+                    tool_name=OFFICIAL_FILING_TOOL, arguments={"symbol": financial.arguments["symbol"], "fiscal_year": year},
+                    depends_on=[financial.task_key] if year is None and financial.task_key else [],
+                    rationale="通过巨潮资讯检索同标的年报，引用支持盈利变化的原文与页码。",
+                ))
+                result.plan.scope.append("通过巨潮资讯定位官方年报")
+                if year is not None:
+                    result.plan.limitations = [
+                        "年报扫描覆盖有限，未找到对应管理层解释时保留缺口。"
+                    ]
+        for task in result.plan.tasks:
+            if task.tool_name == "read_uploaded_annual_report":
+                raise ValueError("Uploaded PDF evidence requires an owned run and supplemental approval")
+            self.registry.validate(task.tool_name, task.arguments)
+        symbol = request.annual_scope.symbol if request.annual_scope else resolve_symbol(request.goal)
+        for task in result.plan.tasks:
+            if task.arguments.get('symbol') != symbol:
+                raise ValueError('Plan stock does not match the confirmed research goal')
+        return result
+
     def _estimate_cost(self, prompt_tokens: int, completion_tokens: int) -> float | None:
         if self.settings.deepseek_input_cost_per_1m is None or self.settings.deepseek_output_cost_per_1m is None:
             return None
         return round((prompt_tokens * self.settings.deepseek_input_cost_per_1m + completion_tokens * self.settings.deepseek_output_cost_per_1m) / 1_000_000, 8)
+
+    async def revise_plan(self, run_id: str, revision: RevisePlanRequest) -> dict[str, Any]:
+        from app.services.annual_update import AnnualScopeError
+        from app.services.planner import PlanResult
+
+        run = self._run_or_404(run_id)
+        stale = AppError(status_code=409, code="plan_revision_conflict", message="计划已更新或已开始执行，请刷新后再操作。")
+        if (run["status"] != "PENDING_APPROVAL" or run.get("approval")
+                or revision.plan_version != run["plan_version"] or revision.expected_updated_at != run["updated_at"]):
+            raise stale
+        goal = revision.goal.strip()
+        excluded = set(revision.excluded_tools)
+        if not excluded and goal == run["goal"]:
+            raise AppError(status_code=422, code="plan_unchanged", message="请修改研究要求或取消不需要的工具。")
+        if not excluded <= {task["tool_name"] for task in run["plan"]["tasks"]}:
+            raise AppError(status_code=422, code="unknown_excluded_tool", message="只能取消当前计划里的工具。")
+        try:
+            if goal == run["goal"]:
+                result = PlanResult(ResearchPlan.model_validate(run["plan"]), run["planner_mode"])
+            else:
+                preferences = self.get_memory(run["thread_id"]).get("research_preferences", {})
+                result = await self._build_plan(CreateRunRequest(goal=goal), preferences)
+            if excluded:
+                tasks = [task for task in result.plan.tasks if task.tool_name not in excluded]
+                if not tasks:
+                    raise ValueError("请至少保留一个工具。")
+                keys = {task.task_key for task in tasks}
+                if any(set(task.depends_on) - keys for task in tasks):
+                    raise ValueError("保留的任务依赖已取消的工具。请保留前置工具或同时取消依赖项。")
+                if result.mode == "annual_update" and tasks[0].tool_name != "get_financial_summary":
+                    raise ValueError("年度财报更新需要保留利润表工具，以确认财年。")
+                result.plan = ResearchPlan.model_validate({
+                    **result.plan.model_dump(), "tasks": [task.model_dump() for task in tasks],
+                    "scope": [task.title for task in tasks],
+                })
+        except (SymbolResolutionError, AnnualScopeError) as exc:
+            raise AppError(status_code=422, code="invalid_revised_scope", message=str(exc)) from exc
+        except ValueError as exc:
+            message = str(exc) if str(exc).startswith(("请", "保留", "年度")) else "无法生成有效计划。请明确标的、研究重点和财年。"
+            raise AppError(status_code=422, code="invalid_revised_plan", message=message) from exc
+        except (httpx.HTTPError, RuntimeError, KeyError) as exc:
+            raise AppError(status_code=502, code="planner_failed", message="生成新版计划失败，原计划仍可使用。") from exc
+
+        version = revision.plan_version + 1
+        timestamp = now_iso()
+        prompt_tokens = run["prompt_tokens"] + result.prompt_tokens
+        completion_tokens = run["completion_tokens"] + result.completion_tokens
+        plan_data = result.plan.model_dump()
+        with self.store.connection() as con:
+            con.execute("BEGIN IMMEDIATE")
+            changed = con.execute(
+                """UPDATE runs SET goal=?, planner_mode=?, plan_version=?, plan_json=?, approval_json=NULL,
+                   prompt_tokens=?, completion_tokens=?, estimated_cost_usd=?, updated_at=?
+                   WHERE id=? AND status='PENDING_APPROVAL' AND approval_json IS NULL AND plan_version=? AND updated_at=?""",
+                (goal, result.mode, version, json.dumps(plan_data, ensure_ascii=False), prompt_tokens,
+                 completion_tokens, self._estimate_cost(prompt_tokens, completion_tokens),
+                 timestamp, run_id, revision.plan_version, revision.expected_updated_at),
+            )
+            if changed.rowcount != 1:
+                raise stale
+            con.execute("DELETE FROM tasks WHERE run_id=? AND plan_version=?", (run_id, revision.plan_version))
+            con.executemany(
+                """INSERT INTO tasks(id,run_id,plan_version,position,title,tool_name,arguments_json,rationale,
+                   status,created_at,updated_at,task_key,depends_on_json) VALUES(?,?,?,?,?,?,?,?,'PENDING',?,?,?,?)""",
+                [(str(uuid4()), run_id, version, position, task.title, task.tool_name,
+                  json.dumps(task.arguments, ensure_ascii=False), task.rationale, timestamp, timestamp,
+                  task.task_key, json.dumps(task.depends_on)) for position, task in enumerate(result.plan.tasks, 1)],
+            )
+            con.execute("UPDATE threads SET updated_at=? WHERE id=?", (timestamp, run["thread_id"]))
+            con.execute("INSERT INTO events(run_id,event_type,data_json,created_at) VALUES(?,?,?,?)",
+                        (run_id, "plan.revised", json.dumps({
+                            "previous_version": revision.plan_version, "plan_version": version,
+                            "excluded_tools": sorted(excluded), "tool_names": [task.tool_name for task in result.plan.tasks],
+                        }), timestamp))
+        self._save_checkpoint(run_id, "PENDING_APPROVAL")
+        return self.get_run(run_id)
 
     def get_run(self, run_id: str) -> dict[str, Any]:
         run = self._run_or_404(run_id)
@@ -195,7 +277,15 @@ class RunService:
         run = self._run_or_404(run_id)
         if run["status"] != "PENDING_APPROVAL" or rejection.plan_version != run["plan_version"]:
             raise AppError(status_code=409, code="rejection_not_allowed", message="Run or plan version cannot be rejected.")
-        self.store.execute("UPDATE runs SET status='REJECTED',error=?,updated_at=?,completed_at=? WHERE id=?", (rejection.reason, now_iso(), now_iso(), run_id))
+        timestamp = now_iso()
+        with self.store.connection() as con:
+            changed = con.execute(
+                """UPDATE runs SET status='REJECTED',error=?,updated_at=?,completed_at=?
+                   WHERE id=? AND status='PENDING_APPROVAL' AND plan_version=?""",
+                (rejection.reason, timestamp, timestamp, run_id, rejection.plan_version),
+            )
+            if changed.rowcount != 1:
+                raise AppError(status_code=409, code="rejection_not_allowed", message="Run or plan version cannot be rejected.")
         self._event(run_id, "plan.rejected", {"plan_version": rejection.plan_version, "reason": rejection.reason})
         self._save_checkpoint(run_id, "REJECTED")
         return self.get_run(run_id)

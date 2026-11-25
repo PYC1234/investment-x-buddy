@@ -14,7 +14,7 @@ import time
 import json
 from app.api.routes.auth import principal, limit
 
-from app.schemas.research import ApprovalRequest, CreateRunRequest, RejectRequest, RetryFailedRequest, SupplementRequest
+from app.schemas.research import ApprovalRequest, CreateRunRequest, RejectRequest, RetryFailedRequest, RevisePlanRequest, SupplementRequest
 from app.services.runs import RunService, get_run_service
 
 
@@ -95,6 +95,12 @@ async def attach_annual_report(run_id: str, request: Request, service: RunServic
 @router.get("/runs/{run_id}")
 async def get_run(run_id: str, service: RunService = Depends(get_run_service)) -> dict[str, Any]:
     return service.get_run(run_id)
+
+
+@router.post("/runs/{run_id}/revise-plan")
+async def revise_plan(run_id: str, body: RevisePlanRequest, request: Request, service: RunService = Depends(get_run_service)):
+    limit(service.store, 'research-create:'+request.state.user['id'], service.settings.max_run_requests_per_hour, seconds=3600)
+    return await service.revise_plan(run_id, body)
 
 
 @router.post("/runs/{run_id}/approve")

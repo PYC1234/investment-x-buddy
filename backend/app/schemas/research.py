@@ -109,3 +109,8 @@ class RetryFailedRequest(BaseModel):
 
 class SupplementRequest(RetryFailedRequest):
     pass
+
+
+class RevisePlanRequest(RetryFailedRequest):
+    goal: str = Field(min_length=3, max_length=1000)
+    excluded_tools: list[str] = Field(default_factory=list, max_length=8)

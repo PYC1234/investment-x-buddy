@@ -43,3 +43,35 @@ async def test_profitability_scope_is_approved_and_reported(monkeypatch, tmp_pat
         assert len(report["evidence_ids"]) == 3
         assert report["coverage_status"] == "SCOPED_EVIDENCE_COLLECTED"
         assert "经营活动现金流量净额 4.50 亿元" in str(report)
+
+
+@pytest.mark.anyio
+async def test_revise_plan_before_approval(monkeypatch, tmp_path):
+    registry, calls = setup_provider(monkeypatch, expected_symbol="601318.SH")
+    settings, service = build_service(tmp_path / "revision.db")
+    service.registry = registry
+    async with await api_client(settings, service) as client:
+        run = (await client.post("/api/v1/runs", json={"goal": "分析中国平安盈利能力"})).json()
+        path = f"/api/v1/runs/{run['id']}"
+        args = {"plan_version": 1, "expected_updated_at": run["updated_at"], "goal": "分析中国平安估值"}
+        response = await client.post(path + "/revise-plan", json=args)
+        assert response.status_code == 200, response.text
+        revised = response.json()
+        assert revised["id"] == run["id"] and revised["thread_id"] == run["thread_id"]
+        assert revised["plan_version"] == 2 and revised["status"] == "PENDING_APPROVAL"
+        assert revised["plan"]["research_type"] == "valuation" and calls == []
+        assert (await client.post(path + "/revise-plan", json=args)).status_code == 409
+        tools = [task["tool_name"] for task in revised["tasks"]]
+        old_approval = await client.post(path + "/approve", json={"plan_version": 1, "allowed_tools": tools})
+        assert old_approval.status_code == 409 and calls == []
+        narrowed = await client.post(path + "/revise-plan", json={
+            "plan_version": 2, "expected_updated_at": revised["updated_at"],
+            "goal": revised["goal"], "excluded_tools": ["get_financial_summary"],
+        })
+        assert narrowed.status_code == 200 and calls == []
+        latest = narrowed.json()
+        assert latest["plan_version"] == 3
+        assert [task["tool_name"] for task in latest["tasks"]] == ["get_valuation_snapshot"]
+        approval = await client.post(path + "/approve", json={"plan_version": 3, "allowed_tools": ["get_valuation_snapshot"]})
+        assert approval.json()["status"] == "COMPLETE"
+        assert calls == ["/api/a-share/valuations/snapshot"]

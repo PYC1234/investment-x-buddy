@@ -1,4 +1,5 @@
 'use client';
+import { useState } from 'react';
 import { ChevronDown, CircleCheck, CircleDashed, CircleDot, LockKeyhole, Pause, Play, RotateCcw, ShieldCheck, Square } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { steps as demoSteps } from '@/data/demo';
@@ -7,9 +8,57 @@ import type { ResearchThread } from '@/types/research';
 
 type Action = 'APPROVE'|'REJECT'|'PAUSE'|'RESUME'|'CANCEL'|'FAIL'|'RECOVER'|'TICK'|'RETRY_FAILED';
 
-export function ResearchPlan({ thread, expanded, setExpanded, onAction, mode }: { thread: ResearchThread; expanded: number | null; setExpanded: (n: number | null) => void; onAction: (action: Action) => void; mode: AppMode }) {
+type Revise = (goal: string, excludedTools: string[]) => Promise<string | null>;
+
+function PlanRevision({ thread, onRevise, onClose }: { thread: ResearchThread; onRevise: Revise; onClose: () => void }) {
+  const [goal, setGoal] = useState(thread.goal);
+  const [excluded, setExcluded] = useState<string[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const tools = [...new Map((thread.tasks ?? []).map(task => [task.toolName, task.title])).entries()];
+  const changed = goal.trim() !== thread.goal || excluded.length > 0;
+  return <form className="card space-y-3 p-5" onSubmit={async event => {
+    event.preventDefault();
+    setError(null);
+    const failure = await onRevise(goal.trim(), excluded);
+    if (failure) setError(failure);
+    else onClose();
+  }}>
+    <h3 className="font-semibold">修改 Plan v{thread.planVersion}</h3>
+    <label className="block text-sm font-medium" htmlFor="revised-research-goal">研究要求</label>
+    <textarea id="revised-research-goal" className="w-full rounded border p-2 text-sm" value={goal}
+      onChange={event => setGoal(event.target.value)} disabled={thread.loading} rows={3} minLength={3} maxLength={1000} required />
+    <p className="text-xs text-slate-600">写清标的和研究重点，例如「分析中国平安的估值」或「601318.SH 2025 年财报更新」。</p>
+    {tools.length > 1 && <fieldset className="space-y-1" disabled={thread.loading}>
+      <legend className="mb-1 text-sm font-medium">取消不需要的工具</legend>
+      {tools.map(([name, title]) => <label key={name} className="flex items-center gap-2 text-sm">
+        <input type="checkbox" checked={excluded.includes(name)} onChange={event => {
+          const checked = event.target.checked;
+          setExcluded(current => checked ? [...current, name] : current.filter(tool => tool !== name));
+        }} />
+        {title}
+      </label>)}
+    </fieldset>}
+    {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
+    <div className="flex flex-wrap gap-2">
+      <Button type="submit" disabled={thread.loading || !changed || goal.trim().length < 3 || (goal.trim() === thread.goal && excluded.length === tools.length)}>{thread.loading ? '生成中…' : '生成新版计划'}</Button>
+      <Button type="button" variant="outline" disabled={thread.loading} onClick={onClose}>返回原计划</Button>
+    </div>
+  </form>;
+}
+
+export function ResearchPlan({ thread, expanded, setExpanded, onAction, onRevise, mode }: { thread: ResearchThread; expanded: number | null; setExpanded: (n: number | null) => void; onAction: (action: Action) => void; onRevise: Revise; mode: AppMode }) {
+  const [editingVersion, setEditingVersion] = useState<string | null>(null);
+  const versionKey = `${thread.remoteRunId}:${thread.planVersion}`;
+  const editing = editingVersion === versionKey && thread.status === 'approval';
+  const taskTitles = new Map(thread.tasks?.map(task => [task.taskKey, task.title]));
+  const plannedTools = new Set(thread.tasks?.map(task => task.toolName));
+  const sources = [...new Set(thread.apiTools?.filter(tool => plannedTools.has(tool.name)).map(tool => ({
+    'FUYAO / MARKET DATA': '扶摇数据接口', 'CNINFO PUBLIC FILINGS': '巨潮资讯公开年报',
+    'IMPORTED PUBLIC SOURCES': '已导入公开资料', 'USER UPLOADED REPORT': '本次上传的年报',
+    'FIXTURE / DEMO DATA': '演示数据',
+  } as Record<string, string>)[tool.permission] ?? tool.permission).filter(Boolean))];
   const steps = mode === 'api'
-    ? (thread.tasks ?? []).map(task => ({ title: task.title, tool: task.toolName, detail: [task.rationale, task.question ? `研究问题：${task.question}` : '', task.dependsOn?.length ? `依赖：${task.dependsOn.join('、')}` : '', task.completionCriteria?.length ? `完成标准：${task.completionCriteria.join('；')}` : ''].filter(Boolean).join('；'), status: task.status, error: task.error, attempts: task.attempts }))
+    ? (thread.tasks ?? []).map(task => ({ title: task.title, tool: task.toolName, detail: [task.rationale, task.question ? `研究问题：${task.question}` : '', task.dependsOn?.length ? `先完成：${task.dependsOn.map(key => taskTitles.get(key) ?? key).join('、')}` : '', task.completionCriteria?.length ? `完成标准：${task.completionCriteria.join('；')}` : ''].filter(Boolean).join('；'), status: task.status, error: task.error, attempts: task.attempts }))
     : demoSteps.map((step, index) => ({ ...step, status: index < thread.step ? 'COMPLETED' : 'PENDING', error: null, attempts: 0 }));
   const failedTasks = (thread.tasks ?? []).filter(task => task.status === 'FAILED');
   const retryFailed = mode === 'api' && failedTasks.length > 0;
@@ -21,9 +70,9 @@ export function ResearchPlan({ thread, expanded, setExpanded, onAction, mode }: 
         <div><dt className="inline text-slate-500">研究标的：</dt><dd className="inline">{thread.company} · {thread.code} · 沪深 A 股</dd></div>
         <div><dt className="inline text-slate-500">研究重点：</dt><dd className="inline">{({profitability: '盈利能力', valuation: '估值分析', risk: '风险线索', comprehensive: '综合研究'} as Record<string, string>)[thread.researchScope?.type ?? 'comprehensive'] ?? '综合研究'}</dd></div>
         <div><dt className="inline text-slate-500">数据范围：</dt><dd className="inline">{thread.researchScope?.scope.length ? thread.researchScope.scope.join('；') : steps.map(step => step.title).join('；')}</dd></div>
-        <div><dt className="inline text-slate-500">工具来源：</dt><dd className="inline">{thread.apiTools?.some(tool => tool.permission.includes('FUYAO')) ? '扶摇真实接口；行情为最近可用数据' : '来源以注册工具及执行后证据为准'}</dd></div>
+        <div><dt className="inline text-slate-500">工具来源：</dt><dd className="inline">{sources.length ? sources.join('、') : '来源以执行后的证据为准'}</dd></div>
       </dl>
-      <div className="mt-3 rounded-md bg-amber-50 p-3 text-xs leading-6 text-amber-900"><strong>尚未覆盖</strong><ul className="list-disc pl-4">{(thread.researchScope?.limitations.length ? thread.researchScope.limitations : ['完整财报、历史估值和独立风险核验尚未覆盖。']).map(item => <li key={item}>{item}</li>)}</ul><p>请核对标的和范围，再批准下方工具。标的存在与数据覆盖将在执行时验证；如需修改，请拒绝计划后新建研究。</p></div>
+      <div className="mt-3 rounded-md bg-amber-50 p-3 text-xs leading-6 text-amber-900"><strong>待核验与限制</strong><ul className="list-disc pl-4">{(thread.researchScope?.limitations.length ? thread.researchScope.limitations : ['标的存在与数据覆盖将在执行时验证。']).map(item => <li key={item}>{item}</li>)}</ul>{thread.status === 'approval' && <p>请核对标的、研究重点和工具。你可以先修改计划，再批准执行。</p>}</div>
     </section>}
     <section className="card plan-card">
       <div className="card-heading"><h2>研究执行计划 <span>{steps.length} steps · {mode === 'api' ? `${thread.plannerMode ?? 'backend'} planner` : 'UI state machine'}</span></h2><div className="run-actions">
@@ -40,7 +89,8 @@ export function ResearchPlan({ thread, expanded, setExpanded, onAction, mode }: 
       }) : <div className="empty-state">尚未生成后端计划。</div>}</div>
       {mode === 'demo' && thread.status === 'running' && <div className="plan-footer"><Button onClick={() => onAction('TICK')}>推进下一演示步骤 <Play /></Button><Button variant="outline" onClick={() => onAction('FAIL')}>模拟工具失败</Button></div>}
     </section>
-    {thread.status === 'approval' && <section className="approval-card"><div className="approval-icon"><LockKeyhole /></div><div><span className="eyebrow">HUMAN APPROVAL REQUIRED</span><h3>{mode === 'api' ? `批准 Plan v${thread.planVersion} 的工具范围？` : '允许扩展行业对比样本？'}</h3><p>{mode === 'api' ? '批准后后端才会执行上方注册工具。批准请求绑定当前计划版本和完整工具白名单。' : '演示请求将增加一次本地工具步骤，不连接金融 API。'}</p><div className="permission-line"><ShieldCheck /> {mode === 'api' ? [...new Set((thread.tasks ?? []).map(task => task.toolName))].join(' · ') : 'peer_comparison · read:demo-peers'}</div></div><div className="approval-actions"><Button disabled={thread.loading} onClick={() => onAction('APPROVE')}>{thread.loading ? '执行中…' : mode === 'api' ? '批准并执行' : '批准演示步骤'}</Button><Button variant="outline" disabled={thread.loading} onClick={() => onAction('REJECT')}>拒绝计划</Button></div></section>}
+    {editing && <PlanRevision key={versionKey} thread={thread} onRevise={onRevise} onClose={() => setEditingVersion(null)} />}
+    {thread.status === 'approval' && !editing && <section className="approval-card"><div className="approval-icon"><LockKeyhole /></div><div><span className="eyebrow">HUMAN APPROVAL REQUIRED</span><h3>{mode === 'api' ? `批准 Plan v${thread.planVersion} 的工具范围？` : '允许扩展行业对比样本？'}</h3><p>{mode === 'api' ? '批准后才会调用数据工具。修改计划会生成新版本，等待你确认。' : '演示请求将增加一次本地工具步骤，不连接金融 API。'}</p><div className="permission-line"><ShieldCheck /> {mode === 'api' ? [...new Set((thread.tasks ?? []).map(task => task.toolName))].join(' · ') : 'peer_comparison · read:demo-peers'}</div></div><div className="approval-actions"><Button disabled={thread.loading} onClick={() => onAction('APPROVE')}>{thread.loading ? '执行中…' : mode === 'api' ? '批准并执行' : '批准演示步骤'}</Button>{mode === 'api' && <Button variant="outline" disabled={thread.loading} onClick={() => setEditingVersion(versionKey)}>修改计划</Button>}<Button variant="outline" disabled={thread.loading} onClick={() => onAction('REJECT')}>拒绝计划</Button></div></section>}
     {['failed','partial'].includes(thread.status) && <section className="failure-card"><div><strong>{thread.status === 'partial' ? '研究部分完成' : '执行已停止'}</strong><p>{mode === 'api' ? retryFailed ? `有 ${failedTasks.length} 项失败。每次只重试失败项一次，沿用原审批与参数，保留成功证据；调用预算不重置。` : '请在 Trace 和报告中查看停止原因。恢复仅继续未完成任务；规划失败请新建研究。' : '模拟工具超时。最近检查点仍可用于恢复。'}</p>{retryFailed && <ul className="mt-2 space-y-1 text-xs">{failedTasks.map(task => <li key={task.id}>{task.title}：{task.error ?? '执行失败'} · 累计 {task.attempts} 次尝试</li>)}</ul>}</div><Button disabled={thread.loading || (mode === 'api' && thread.approval !== 'approved')} onClick={() => onAction(mode === 'api' ? retryFailed ? 'RETRY_FAILED' : 'RESUME' : 'RECOVER')}><RotateCcw />{retryFailed ? '重试失败任务' : '从检查点恢复'}</Button></section>}
   </div>;
 }

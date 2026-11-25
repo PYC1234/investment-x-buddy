@@ -28,7 +28,8 @@ test('质量失败证据保留供复核但不进入图表或指标，报告显�
   assert.equal(mapped.apiDataset?.metrics[0].value, '—');
   assert.match(mapped.apiEvidence![0].limitation, /来源时间异常/);
   const html = renderToStaticMarkup(createElement(ResearchReport, { thread: mapped, data: mapped.apiDataset ?? null, mode: 'api', onEvidence: () => {} }));
-  assert.match(html, /未通过，异常证据已排除/);
+  assert.match(html, /有证据未通过检查/);
+  assert.match(html, /异常证据已排除/);
 });
 
 test('示例目标必须包含当前证券代码或明确的预置公司', () => {
@@ -91,13 +92,14 @@ test('审批页面渲染标的、范围、缺口与批准按钮', () => {
   input.run.status = 'PENDING_APPROVAL';
   input.run.plan = {research_goal: input.run.goal, research_type: 'risk', scope: ['年度利润表'], limitations: ['不良贷款率尚未接入'], tasks: []};
   const thread = applyBundle(initialThreads[0], input);
-  const html = renderToStaticMarkup(createElement(ResearchPlan, {thread, expanded: null, setExpanded: () => {}, onAction: () => {}, mode: 'api'}));
+  const html = renderToStaticMarkup(createElement(ResearchPlan, {thread, expanded: null, setExpanded: () => {}, onAction: () => {}, onRevise: async () => null, mode: 'api'}));
   assert.match(html, /本次研究确认/);
   assert.match(html, /招商银行/);
   assert.match(html, /600036.SH/);
   assert.match(html, /年度利润表/);
   assert.match(html, /不良贷款率尚未接入/);
   assert.match(html, /批准并执行/);
+  assert.match(html, /修改计划/);
 });
 
 
@@ -109,7 +111,7 @@ test('失败任务提供独立重试入口、错误原因和原始状态版本',
   input.run.tasks[0].error = 'Mock provider timeout';
   const thread = applyBundle(initialThreads[0], input);
   assert.equal(thread.remoteUpdatedAt, input.run.updated_at);
-  const html = renderToStaticMarkup(createElement(ResearchPlan, {thread, expanded: null, setExpanded: () => {}, onAction: () => {}, mode: 'api'}));
+  const html = renderToStaticMarkup(createElement(ResearchPlan, {thread, expanded: null, setExpanded: () => {}, onAction: () => {}, onRevise: async () => null, mode: 'api'}));
   assert.match(html, /重试失败任务/);
   assert.match(html, /Mock provider timeout/);
   assert.match(html, /调用预算不重置/);
