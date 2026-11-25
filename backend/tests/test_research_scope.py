@@ -96,6 +96,8 @@ async def test_model_feedback_previews_changes_and_leaves_ambiguous_plan_untouch
             return plan_feedback.FeedbackInterpretation(summary="想缩小范围", clarification="你想保留哪一项？"), 10, 5
         if feedback == "取消现金流":
             return plan_feedback.FeedbackInterpretation(summary="不查现金流", remove_tools=["get_fuyao_cash_flow"]), 10, 5
+        if feedback == "原计划保留，再补现金流":
+            return plan_feedback.FeedbackInterpretation(summary="原计划保留，补现金流", require_tools=["get_fuyao_cash_flow"]), 10, 5
         return plan_feedback.FeedbackInterpretation(
             summary="重点核对利润有没有现金流支撑", focus="profitability",
             require_tools=["get_financial_summary", "get_fuyao_cash_flow"], remove_tools=["get_fuyao_balance_sheet"],
@@ -119,6 +121,15 @@ async def test_model_feedback_previews_changes_and_leaves_ambiguous_plan_untouch
         assert revised["plan"]["revision_note"]["added"] == ["年度合并现金流量表"]
         assert set(revised["plan"]["revision_note"]["removed"]) == {"行情快照与历史走势", "估值倍数核对"}
         assert revised["usage"]["total_tokens"] == 15 and not calls
+        other = (await client.post("/api/v1/runs", json={"goal": "分析贵州茅台盈利与估值"})).json()
+        appended = (await client.post(f"/api/v1/runs/{other['id']}/revise-plan", json={
+            "plan_version": 1, "expected_updated_at": other["updated_at"], "goal": other["goal"],
+            "feedback": "原计划保留，再补现金流",
+        })).json()
+        assert appended["plan"]["research_type"] == "comprehensive"
+        assert appended["plan_version"] == 2 and not calls
+        assert appended["plan"]["revision_note"]["added"] == ["年度合并现金流量表"]
+        assert appended["plan"]["revision_note"]["removed"] == []
 
 
 @pytest.mark.anyio

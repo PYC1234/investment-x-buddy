@@ -188,7 +188,7 @@ export function ResearchDashboard() {
     try {
       const result = await researchApi.revisePlan(active.remoteRunId, active.planVersion, active.remoteUpdatedAt, nextGoal, excludedTools, feedback);
       if (!result.ok) return { message: result.error, error: true };
-      if ('clarification' in result.data) return { message: result.data.clarification, error: false };
+      if ('clarification' in result.data) return { message: result.data.clarification, error: false, planUnchanged: true };
       if (!await refreshRun(active.remoteRunId, active.id)) return { message: '新版已保存，请刷新查看。', error: false };
       setExpanded(null);
       return null;

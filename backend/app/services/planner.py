@@ -111,7 +111,7 @@ class FixturePlanner:
         valuation = PlannedTask(title="估值倍数核对", tool_name="get_valuation_snapshot", arguments={"symbol": symbol}, rationale="查看 PE(TTM) 与 PB(MRQ)；缺少历史和同业基准，不直接计算目标价。")
         tasks = {"profitability": [financial], "valuation": [valuation, financial], "risk": [market, financial, valuation], "comprehensive": [market, financial, valuation]}[focus]
         scope_names = {"get_market_snapshot": "最近行情与一年历史日线", "get_financial_summary": "最新可用五个年度利润表", "get_valuation_snapshot": "PE(TTM)、PB(MRQ) 估值快照"}
-        limitations = ["未接入完整资产负债表与现金流量表，无法完整核验盈利质量。", "没有历史估值与同业比较，不提供公允价值或目标价。"]
+        limitations = ["本次计划未安排资产负债表和现金流量表，盈利质量仍待核验。", "本次计划未安排历史估值和同业比较。"]
         if focus == "risk" or bank_risk:
             limitations.append("银行不良贷款率、拨备覆盖率、净息差、资本与流动性指标尚未接入；仅提供风险线索。" if bank_risk else "风险事件、公告及行业数据尚未接入；仅提供风险线索，不能完成全面风险评估。")
         for index, task in enumerate(tasks, 1):

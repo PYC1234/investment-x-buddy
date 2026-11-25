@@ -227,6 +227,8 @@ class RunService:
             else:
                 preferences = self.get_memory(run["thread_id"]).get("research_preferences", {})
                 result = await self._build_plan(CreateRunRequest(goal=goal), preferences, FixturePlanner() if interpretation else None)
+            if interpretation and interpretation.require_tools:
+                await self._append_requested_tools(result, goal, set(interpretation.require_tools), excluded)
             candidate_tools = {task.tool_name: task.title for task in result.plan.tasks}
             if interpretation and interpretation.require_tools:
                 # A narrower feedback request must not inherit every new tool from the preset.
@@ -260,8 +262,6 @@ class RunService:
             raise AppError(status_code=502, code="planner_failed", message="生成新版计划失败，原计划仍可使用。") from exc
 
         revised_tools = {task.tool_name: task.title for task in result.plan.tasks}
-        if interpretation and not set(interpretation.require_tools) <= revised_tools.keys():
-            return {"status": "NEEDS_CLARIFICATION", "clarification": "当前研究范围无法安排你要求的全部工具。请明确优先研究盈利、估值还是指定财年的年报。"}
         if interpretation and goal == run["goal"] and revised_tools.keys() == previous_tools.keys():
             absent = excluded - previous_tools.keys() - candidate_tools.keys()
             if absent:
@@ -309,6 +309,65 @@ class RunService:
                         }), timestamp))
         self._save_checkpoint(run_id, "PENDING_APPROVAL")
         return self.get_run(run_id)
+
+    async def _append_requested_tools(self, result, goal, required, excluded):
+        from app.services.fuyao import FUYAO_STATEMENTS
+        from app.services.official_filings import OFFICIAL_FILING_TOOL
+        from app.services.research_sources import SUPPLEMENT_TOOLS
+
+        labels = {name: label for name, (_, label) in SUPPLEMENT_TOOLS.items()}
+        labels.update({name: next(label for key, label in SUPPLEMENT_TOOLS.values() if key == dataset)
+                       for name, (_, dataset, _) in FUYAO_STATEMENTS.items()})
+        labels.update({OFFICIAL_FILING_TOOL: "官方年报", "get_financial_summary": "利润表"})
+        conflicts = required & excluded
+        if conflicts:
+            names = "、".join(labels.get(name, name) for name in sorted(conflicts))
+            raise ValueError(f"请确认是否查询{names}：修改意见同时要求保留和取消这些步骤。")
+        current = {task.tool_name: task for task in result.plan.tasks}
+        missing = required - current.keys()
+        if not missing:
+            return
+        symbol = resolve_symbol(goal)
+        template = await self._build_plan(CreateRunRequest(goal=f"分析 {symbol} 的盈利能力"), {}, FixturePlanner())
+        allowed = {task.tool_name: task for task in template.plan.tasks}
+        unsupported = missing - allowed.keys()
+        if unsupported:
+            names = "、".join(labels.get(name, name) for name in sorted(unsupported))
+            raise ValueError(f"请调整计划：当前无法自动追加{names}。历史估值、同业数据和部分公开资料需要先导入对应资料。")
+        if OFFICIAL_FILING_TOOL in missing and result.mode != "annual_update":
+            if "get_financial_summary" in excluded:
+                raise ValueError("请保留利润表，或指定财年后再追加官方年报。")
+            if "get_financial_summary" not in current:
+                missing.add("get_financial_summary")
+                required.add("get_financial_summary")
+        if len(current) + len(missing) > 8:
+            raise ValueError("请先移除不需要的步骤。追加后最多可安排 8 项工具。")
+        added_titles = []
+        for task in template.plan.tasks:
+            if task.tool_name not in missing:
+                continue
+            changes = {"task_key": f"revised_{task.tool_name}"}
+            if task.tool_name == OFFICIAL_FILING_TOOL:
+                if result.mode == "annual_update":
+                    changes.update(arguments={**task.arguments, "fiscal_year": result.plan.tasks[0].arguments["fiscal_year"]},
+                                   depends_on=[])
+                else:
+                    changes["depends_on"] = [current["get_financial_summary"].task_key]
+            added = task.model_copy(update=changes)
+            self.registry.validate(added.tool_name, added.arguments)
+            current[added.tool_name] = added
+            added_titles.append(added.title)
+        limitations = list(result.plan.limitations)
+        if FUYAO_STATEMENTS.keys() & current.keys():
+            limitations = [text for text in limitations
+                           if not text.startswith(("本次计划未安排资产负债表和现金流量表", "未接入完整资产负债表与现金流量表"))]
+            missing_reports = FUYAO_STATEMENTS.keys() - current.keys()
+            if missing_reports:
+                limitations.append(f"本次计划未安排{'、'.join(labels[name] for name in sorted(missing_reports))}查询。")
+        result.plan = ResearchPlan.model_validate({
+            **result.plan.model_dump(), "tasks": [task.model_dump() for task in current.values()],
+            "scope": [*result.plan.scope, *added_titles], "limitations": limitations,
+        })
 
     @staticmethod
     def _apply_plan_feedback(goal, feedback, tasks):
@@ -562,7 +621,8 @@ class RunService:
                 findings.append({"task": item["title"], "statement": statement, "evidence_ids": [item["id"]]})
                 if data.get("missing_information") and not (focus == "profitability" and item["tool_name"] == "get_financial_summary"):
                     missing.append(data["missing_information"])
-            if focus == "profitability" and not annual_update:
+            if not annual_update and (focus == "profitability" or any(
+                    item["tool_name"] == "get_fuyao_cash_flow" for item in evidence)):
                 usable = {item["tool_name"]: item for item in evidence
                           if not item["is_demo"] and item["data"].get("available", True)
                           and item["data"].get("quality", {}).get("usable", True)}

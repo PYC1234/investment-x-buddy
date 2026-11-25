@@ -8,13 +8,14 @@ import type { ResearchThread } from '@/types/research';
 
 type Action = 'APPROVE'|'REJECT'|'PAUSE'|'RESUME'|'CANCEL'|'FAIL'|'RECOVER'|'TICK'|'RETRY_FAILED';
 
-type Revise = (goal: string, excludedTools: string[], feedback?: string) => Promise<{ message: string; error: boolean } | null>;
+type RevisionResponse = { message: string; error: boolean; planUnchanged?: boolean };
+type Revise = (goal: string, excludedTools: string[], feedback?: string) => Promise<RevisionResponse | null>;
 
 function PlanRevision({ thread, onRevise, onAction }: { thread: ResearchThread; onRevise: Revise; onAction: (action: Action) => void }) {
   const [goal, setGoal] = useState(thread.goal);
   const [feedback, setFeedback] = useState('');
   const [excluded, setExcluded] = useState<string[]>([]);
-  const [response, setResponse] = useState<{ message: string; error: boolean } | null>(null);
+  const [response, setResponse] = useState<RevisionResponse | null>(null);
   const tools = [...new Map((thread.tasks ?? []).map(task => [task.toolName, task.title])).entries()];
   const changed = goal.trim() !== thread.goal || excluded.length > 0 || feedback.trim().length > 0;
   return <form className="card space-y-3 p-5" onSubmit={async event => {
@@ -26,7 +27,7 @@ function PlanRevision({ thread, onRevise, onAction }: { thread: ResearchThread; 
     <p className="text-sm text-slate-600">计划合适就批准执行。需要调整时，先提交修改意见，再核对新版计划。</p>
     <label className="block text-sm font-medium" htmlFor="research-plan-feedback">修改意见</label>
     <textarea id="research-plan-feedback" className="w-full rounded border p-2 text-sm" value={feedback}
-      onChange={event => setFeedback(event.target.value)} disabled={thread.loading} rows={3} maxLength={500}
+      onChange={event => { setFeedback(event.target.value); setResponse(null); }} disabled={thread.loading} rows={3} maxLength={500}
       placeholder="例如：先别看股价，我想知道利润有没有现金流支撑。" />
     <details className="space-y-2">
       <summary className="cursor-pointer text-sm">直接编辑研究要求或工具</summary>
@@ -44,10 +45,17 @@ function PlanRevision({ thread, onRevise, onAction }: { thread: ResearchThread; 
       </label>)}
     </fieldset>}
     </details>
-    {response && <p role={response.error ? 'alert' : 'status'} className={response.error ? 'text-sm text-red-700' : 'rounded bg-slate-50 p-3 text-sm'}>{response.message}</p>}
+    {response && <div role={response.error ? 'alert' : 'status'} className={response.error ? 'text-sm text-red-700' : 'space-y-1 rounded bg-slate-50 p-3 text-sm'}>
+      <p>{response.message}</p>
+      {response.planUnchanged && <p>这次意见未应用。你可以修改后重试，或按当前 Plan v{thread.planVersion} 执行。</p>}
+    </div>}
     <div className="flex flex-wrap gap-2">
       <Button type="submit" disabled={thread.loading || !changed || goal.trim().length < 3 || (goal.trim() === thread.goal && excluded.length === tools.length)}>{thread.loading ? '生成中…' : '生成新版计划'}</Button>
       <Button type="button" disabled={thread.loading || changed} onClick={() => onAction('APPROVE')}>批准并执行</Button>
+      {response?.planUnchanged && changed && <Button type="button" variant="outline" disabled={thread.loading} onClick={() => {
+        setGoal(thread.goal); setFeedback(''); setExcluded([]); setResponse(null);
+        onAction('APPROVE');
+      }}>放弃意见，批准 Plan v{thread.planVersion}</Button>}
       {changed && <Button type="button" variant="outline" disabled={thread.loading} onClick={() => {
         setGoal(thread.goal); setFeedback(''); setExcluded([]); setResponse(null);
       }}>清空修改</Button>}

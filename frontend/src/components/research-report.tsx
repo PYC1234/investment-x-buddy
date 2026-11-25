@@ -6,6 +6,22 @@ import type { AppMode } from '@/lib/research-gateway';
 import type { Dataset, ResearchThread } from '@/types/research';
 import { ProfitabilityTable } from '@/components/research-evidence-table';
 
+function groupLimitations(messages: string[]) {
+  const groups = new Map<string, Set<string>>();
+  for (const item of messages) {
+    const match = /^\[(EVD-[A-Z0-9]+)\]\s+(.+)$/.exec(item);
+    let message = match?.[2] ?? item;
+    if (message === '仅作接口级质量检查，未与交易所公告或独立来源交叉核验。'
+        || message === '扶摇接口数据尚未与交易所原始公告交叉核验。') {
+      message = '扶摇数据已接受接口级检查，尚待独立来源交叉核验。';
+    }
+    const ids = groups.get(message) ?? new Set<string>();
+    if (match) ids.add(match[1]);
+    groups.set(message, ids);
+  }
+  return [...groups].map(([message, ids]) => ({ message, ids: [...ids] }));
+}
+
 export function ResearchReport({ thread, data, onEvidence, mode, review }: { thread: ResearchThread; data: Dataset | null; onEvidence: (id: string) => void; mode: AppMode; review?: ReactNode }) {
   if (mode === 'api') {
     const report = thread.apiReport;
@@ -13,6 +29,7 @@ export function ResearchReport({ thread, data, onEvidence, mode, review }: { thr
     const evidenceById = new Map(evidence.map(item => [item.id, item]));
     const coverage = report?.review?.coverage_status === 'SCOPED_EVIDENCE_COLLECTED';
     const annualGaps = report?.annualAnswers?.some(answer => answer.status.startsWith('MISSING'));
+    const limitations = groupLimitations(report?.missingInformation ?? []);
     const income = thread.researchScope?.type === 'profitability' ? evidence.find(item =>
       item.toolName === 'get_financial_summary' && !item.isDemo
       && (item.data.quality as { usable?: boolean } | undefined)?.usable !== false) : undefined;
@@ -47,7 +64,11 @@ export function ResearchReport({ thread, data, onEvidence, mode, review }: { thr
           </div>
           <div className="risk-box">
             <h4><ShieldAlert size={15} />缺失信息与限制</h4>
-            {report.missingInformation.length ? [...new Set(report.missingInformation)].map(item => <p key={item}>{item}</p>) : <p>暂无额外缺失信息。</p>}
+            {limitations.length ? limitations.map(({ message, ids }) => <div key={message} className="mb-2">
+              <p>{message}</p>
+              {ids.map(id => evidenceById.has(id) && <button key={id} type="button" className="citation mr-1 text-xs"
+                onClick={() => onEvidence(id)} aria-label={`查看证据 ${id}`}>{id}</button>)}
+            </div>) : <p>暂无额外缺失信息。</p>}
             {review}
           </div>
         </div>

@@ -32,6 +32,8 @@ async def interpret_feedback(settings, registry, goal, plan, feedback):
         "你只解释用户对当前股票研究计划的修改意见，用中文输出一个符合 schema 的 JSON。"
         "不能执行工具、授权、变更证券或假定用户没有提供的年份。用户要求更换证券时，请澄清并提示直接编辑研究要求。"
         "focus 只在意见明确要求改变研究重点时填写。关心利润现金流支撑属于 profitability；"
+        "如果用户要求保留原计划、顺便补充或追加一项资料，focus 留空，只把明确请求新增的工具放入 require_tools，保留当前步骤。"
+        "扶摇 get_fuyao_cash_flow 和 get_fuyao_balance_sheet 可以直接追加；已导入资料的工具仅在有对应资料时可用。"
         "如果只关心利润与现金流，明确移除行情、估值以及用户不希望查的步骤，并要求保留利润表和现金流。"
         "最近一年使用最新可用年度，只有明确指定 4 位财年才填 fiscal_year。"
         "remove_tools/require_tools 仅能使用提供的工具名。"

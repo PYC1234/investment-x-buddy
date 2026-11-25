@@ -38,6 +38,25 @@ test('示例目标必须包含当前证券代码或明确的预置公司', () =>
   assert.match(buildExampleGoal({ company: '尚未指定证券', code: '002594.SZ' }, '估值与风险'), /请对002594.SZ/);
 });
 
+test('相同证据限制合并展示，并保留各自的证据入口', () => {
+  const input = bundle();
+  input.evidence[0].id = 'EVD-AAAA';
+  input.evidence[1].id = 'EVD-BBBB';
+  input.report = {
+    title: '研究报告', status: 'COMPLETE', data_notice: '', executive_summary: '', findings: [], evidence_ids: [],
+    missing_information: [
+      '[EVD-AAAA] 仅作接口级质量检查，未与交易所公告或独立来源交叉核验。',
+      '[EVD-BBBB] 仅作接口级质量检查，未与交易所公告或独立来源交叉核验。',
+      '扶摇接口数据尚未与交易所原始公告交叉核验。',
+    ],
+  };
+  const thread = applyBundle(initialThreads[0], input);
+  const html = renderToStaticMarkup(createElement(ResearchReport, { thread, data: null, mode: 'api', onEvidence: () => {} }));
+  assert.equal(html.match(/尚待独立来源交叉核验/g)?.length, 1);
+  assert.match(html, /查看证据 EVD-AAAA/);
+  assert.match(html, /查看证据 EVD-BBBB/);
+});
+
 function bundle(isDemo = false): RunBundle {
   return {
     run: { id: 'run', thread_id: 'thread', goal: '分析招商银行的风险', status: 'COMPLETE', plan_version: 1, planner_mode: 'fixture', plan: null, approval: null, report: null, error: null, created_at: '2026-10-11T00:00:00Z', updated_at: '2026-10-11T00:00:00Z', started_at: null, completed_at: null, tasks: [{id: 'task', position: 1, title: '行情', tool_name: 'get_market_snapshot', arguments: {symbol: '600036.SH'}, rationale: '研究', status: 'COMPLETED', attempts: 1, evidence_id: 'ev1', error: null}], usage: {prompt_tokens: 0, completion_tokens: 0, total_tokens: 0, estimated_cost_usd: null, cost_status: 'NOT_CONFIGURED'} },
