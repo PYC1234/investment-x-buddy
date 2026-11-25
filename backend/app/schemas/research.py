@@ -114,3 +114,4 @@ class SupplementRequest(RetryFailedRequest):
 class RevisePlanRequest(RetryFailedRequest):
     goal: str = Field(min_length=3, max_length=1000)
     excluded_tools: list[str] = Field(default_factory=list, max_length=8)
+    feedback: str = Field(default="", max_length=500)

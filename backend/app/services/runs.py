@@ -1,4 +1,5 @@
 import json
+import re
 import time
 from datetime import datetime, timedelta, timezone
 from functools import lru_cache
@@ -171,6 +172,13 @@ class RunService:
             raise stale
         goal = revision.goal.strip()
         excluded = set(revision.excluded_tools)
+        feedback = revision.feedback.strip()
+        if feedback:
+            try:
+                goal, removed = self._apply_plan_feedback(goal, feedback, run["plan"]["tasks"])
+            except SymbolResolutionError as exc:
+                raise AppError(status_code=422, code="invalid_revised_scope", message=str(exc)) from exc
+            excluded.update(removed)
         if not excluded and goal == run["goal"]:
             raise AppError(status_code=422, code="plan_unchanged", message="请修改研究要求或取消不需要的工具。")
         if not excluded <= {task["tool_name"] for task in run["plan"]["tasks"]}:
@@ -235,6 +243,44 @@ class RunService:
                         }), timestamp))
         self._save_checkpoint(run_id, "PENDING_APPROVAL")
         return self.get_run(run_id)
+
+    @staticmethod
+    def _apply_plan_feedback(goal, feedback, tasks):
+        removed = set()
+        aliases = {
+            "find_official_annual_report": ("年报", "巨潮"),
+            "search_company_filings": ("年报", "公告", "财报原文"),
+            "get_fuyao_cash_flow": ("现金流",),
+            "get_cash_flow": ("现金流",),
+            "get_fuyao_balance_sheet": ("资产负债",),
+            "get_balance_sheet": ("资产负债",),
+            "get_financial_summary": ("利润表",),
+            "get_market_snapshot": ("行情", "股价", "价格走势"),
+            "get_valuation_snapshot": ("估值", "市盈率", "市净率"),
+        }
+        for instruction in re.split(r"[，,。；;\n]+", feedback):
+            instruction = instruction.strip()
+            if not instruction:
+                continue
+            if match := re.fullmatch(r"(?:不要|不需要|不用|不查|跳过|取消|去掉|移除)[查找看取数询]*\s*(.+)", instruction):
+                target = match[1]
+                matches = {task["tool_name"] for task in tasks if target in task["title"]
+                           or any(alias in target for alias in aliases.get(task["tool_name"], ()))}
+                if matches:
+                    removed.update(matches)
+                    continue
+            if match := re.fullmatch(r"(?:改为|改成|改做|换成)[：:\s]*(.+)", instruction):
+                updated = match[1]
+                if updated in {"估值", "盈利能力", "风险", "综合研究"}:
+                    updated = f"分析{resolve_symbol(goal)}的{updated}"
+                goal = updated
+                continue
+            if match := re.fullmatch(r"(?:只看|只分析|重点看|重点分析)(盈利能力|盈利|估值|风险)", instruction):
+                goal = f"分析{resolve_symbol(goal)}的{match[1]}"
+                continue
+            raise AppError(status_code=422, code="unsupported_plan_feedback",
+                           message="暂未识别这条修改意见。可以输入「取消官方年报」或「改为估值」，也可以展开下方选项直接改写研究要求。")
+        return goal, removed
 
     def get_run(self, run_id: str) -> dict[str, Any]:
         run = self._run_or_404(run_id)

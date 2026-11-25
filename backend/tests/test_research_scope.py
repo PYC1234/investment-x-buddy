@@ -53,7 +53,7 @@ async def test_revise_plan_before_approval(monkeypatch, tmp_path):
     async with await api_client(settings, service) as client:
         run = (await client.post("/api/v1/runs", json={"goal": "分析中国平安盈利能力"})).json()
         path = f"/api/v1/runs/{run['id']}"
-        args = {"plan_version": 1, "expected_updated_at": run["updated_at"], "goal": "分析中国平安估值"}
+        args = {"plan_version": 1, "expected_updated_at": run["updated_at"], "goal": run["goal"], "feedback": "改为估值"}
         response = await client.post(path + "/revise-plan", json=args)
         assert response.status_code == 200, response.text
         revised = response.json()
@@ -66,7 +66,7 @@ async def test_revise_plan_before_approval(monkeypatch, tmp_path):
         assert old_approval.status_code == 409 and calls == []
         narrowed = await client.post(path + "/revise-plan", json={
             "plan_version": 2, "expected_updated_at": revised["updated_at"],
-            "goal": revised["goal"], "excluded_tools": ["get_financial_summary"],
+            "goal": revised["goal"], "feedback": "取消利润表",
         })
         assert narrowed.status_code == 200 and calls == []
         latest = narrowed.json()

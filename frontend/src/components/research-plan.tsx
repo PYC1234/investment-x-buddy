@@ -8,26 +8,32 @@ import type { ResearchThread } from '@/types/research';
 
 type Action = 'APPROVE'|'REJECT'|'PAUSE'|'RESUME'|'CANCEL'|'FAIL'|'RECOVER'|'TICK'|'RETRY_FAILED';
 
-type Revise = (goal: string, excludedTools: string[]) => Promise<string | null>;
+type Revise = (goal: string, excludedTools: string[], feedback?: string) => Promise<string | null>;
 
-function PlanRevision({ thread, onRevise, onClose }: { thread: ResearchThread; onRevise: Revise; onClose: () => void }) {
+function PlanRevision({ thread, onRevise, onAction }: { thread: ResearchThread; onRevise: Revise; onAction: (action: Action) => void }) {
   const [goal, setGoal] = useState(thread.goal);
+  const [feedback, setFeedback] = useState('');
   const [excluded, setExcluded] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const tools = [...new Map((thread.tasks ?? []).map(task => [task.toolName, task.title])).entries()];
-  const changed = goal.trim() !== thread.goal || excluded.length > 0;
+  const changed = goal.trim() !== thread.goal || excluded.length > 0 || feedback.trim().length > 0;
   return <form className="card space-y-3 p-5" onSubmit={async event => {
     event.preventDefault();
     setError(null);
-    const failure = await onRevise(goal.trim(), excluded);
+    const failure = await onRevise(goal.trim(), excluded, feedback.trim());
     if (failure) setError(failure);
-    else onClose();
   }}>
-    <h3 className="font-semibold">修改 Plan v{thread.planVersion}</h3>
-    <label className="block text-sm font-medium" htmlFor="revised-research-goal">研究要求</label>
-    <textarea id="revised-research-goal" className="w-full rounded border p-2 text-sm" value={goal}
-      onChange={event => setGoal(event.target.value)} disabled={thread.loading} rows={3} minLength={3} maxLength={1000} required />
-    <p className="text-xs text-slate-600">写清标的和研究重点，例如「分析中国平安的估值」或「601318.SH 2025 年财报更新」。</p>
+    <h3 className="font-semibold">确认 Plan v{thread.planVersion}</h3>
+    <p className="text-sm text-slate-600">计划合适就批准执行。需要调整时，先提交修改意见，再核对新版计划。</p>
+    <label className="block text-sm font-medium" htmlFor="research-plan-feedback">修改意见</label>
+    <textarea id="research-plan-feedback" className="w-full rounded border p-2 text-sm" value={feedback}
+      onChange={event => setFeedback(event.target.value)} disabled={thread.loading} rows={3} maxLength={500}
+      placeholder="例如：取消官方年报，或改为估值" />
+    <details className="space-y-2">
+      <summary className="cursor-pointer text-sm">直接编辑研究要求或工具</summary>
+      <label className="block text-sm font-medium" htmlFor="revised-research-goal">研究要求</label>
+      <textarea id="revised-research-goal" className="w-full rounded border p-2 text-sm" value={goal}
+        onChange={event => setGoal(event.target.value)} disabled={thread.loading} rows={2} minLength={3} maxLength={1000} required />
     {tools.length > 1 && <fieldset className="space-y-1" disabled={thread.loading}>
       <legend className="mb-1 text-sm font-medium">取消不需要的工具</legend>
       {tools.map(([name, title]) => <label key={name} className="flex items-center gap-2 text-sm">
@@ -38,18 +44,21 @@ function PlanRevision({ thread, onRevise, onClose }: { thread: ResearchThread; o
         {title}
       </label>)}
     </fieldset>}
+    </details>
     {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
     <div className="flex flex-wrap gap-2">
       <Button type="submit" disabled={thread.loading || !changed || goal.trim().length < 3 || (goal.trim() === thread.goal && excluded.length === tools.length)}>{thread.loading ? '生成中…' : '生成新版计划'}</Button>
-      <Button type="button" variant="outline" disabled={thread.loading} onClick={onClose}>返回原计划</Button>
+      <Button type="button" disabled={thread.loading || changed} onClick={() => onAction('APPROVE')}>批准并执行</Button>
+      {changed && <Button type="button" variant="outline" disabled={thread.loading} onClick={() => {
+        setGoal(thread.goal); setFeedback(''); setExcluded([]); setError(null);
+      }}>清空修改</Button>}
+      <Button type="button" variant="outline" disabled={thread.loading} onClick={() => onAction('REJECT')}>拒绝计划</Button>
     </div>
   </form>;
 }
 
 export function ResearchPlan({ thread, expanded, setExpanded, onAction, onRevise, mode }: { thread: ResearchThread; expanded: number | null; setExpanded: (n: number | null) => void; onAction: (action: Action) => void; onRevise: Revise; mode: AppMode }) {
-  const [editingVersion, setEditingVersion] = useState<string | null>(null);
   const versionKey = `${thread.remoteRunId}:${thread.planVersion}`;
-  const editing = editingVersion === versionKey && thread.status === 'approval';
   const taskTitles = new Map(thread.tasks?.map(task => [task.taskKey, task.title]));
   const plannedTools = new Set(thread.tasks?.map(task => task.toolName));
   const sources = [...new Set(thread.apiTools?.filter(tool => plannedTools.has(tool.name)).map(tool => ({
@@ -75,7 +84,7 @@ export function ResearchPlan({ thread, expanded, setExpanded, onAction, onRevise
       <div className="mt-3 rounded-md bg-amber-50 p-3 text-xs leading-6 text-amber-900"><strong>待核验与限制</strong><ul className="list-disc pl-4">{(thread.researchScope?.limitations.length ? thread.researchScope.limitations : ['标的存在与数据覆盖将在执行时验证。']).map(item => <li key={item}>{item}</li>)}</ul>{thread.status === 'approval' && <p>请核对标的、研究重点和工具。你可以先修改计划，再批准执行。</p>}</div>
     </section>}
     <section className="card plan-card">
-      <div className="card-heading"><h2>研究执行计划 <span>{steps.length} steps · {mode === 'api' ? `${thread.plannerMode ?? 'backend'} planner` : 'UI state machine'}</span></h2><div className="run-actions">
+      <div className="card-heading"><h2>研究执行计划 <span>{steps.length} 步 · {mode === 'api' ? ({ fixture: '规则规划', deepseek: 'DeepSeek 规划', annual_update: '年报研究规划' }[thread.plannerMode ?? ''] ?? '后端规划') : '本地演示'}</span></h2><div className="run-actions">
         {mode === 'demo' && thread.status === 'running' && <Button variant="outline" size="sm" onClick={() => onAction('PAUSE')}><Pause />暂停</Button>}
         {mode === 'demo' && thread.status === 'paused' && <Button variant="outline" size="sm" onClick={() => onAction('RESUME')}><Play />恢复</Button>}
         {mode === 'api' && ['failed','partial'].includes(thread.status) && <Button variant="outline" size="sm" disabled={thread.loading || thread.approval !== 'approved'} onClick={() => onAction(retryFailed ? 'RETRY_FAILED' : 'RESUME')}><RotateCcw />{retryFailed ? '重试失败任务' : '恢复'}</Button>}
@@ -89,8 +98,9 @@ export function ResearchPlan({ thread, expanded, setExpanded, onAction, onRevise
       }) : <div className="empty-state">尚未生成后端计划。</div>}</div>
       {mode === 'demo' && thread.status === 'running' && <div className="plan-footer"><Button onClick={() => onAction('TICK')}>推进下一演示步骤 <Play /></Button><Button variant="outline" onClick={() => onAction('FAIL')}>模拟工具失败</Button></div>}
     </section>
-    {editing && <PlanRevision key={versionKey} thread={thread} onRevise={onRevise} onClose={() => setEditingVersion(null)} />}
-    {thread.status === 'approval' && !editing && <section className="approval-card"><div className="approval-icon"><LockKeyhole /></div><div><span className="eyebrow">HUMAN APPROVAL REQUIRED</span><h3>{mode === 'api' ? `批准 Plan v${thread.planVersion} 的工具范围？` : '允许扩展行业对比样本？'}</h3><p>{mode === 'api' ? '批准后才会调用数据工具。修改计划会生成新版本，等待你确认。' : '演示请求将增加一次本地工具步骤，不连接金融 API。'}</p><div className="permission-line"><ShieldCheck /> {mode === 'api' ? [...new Set((thread.tasks ?? []).map(task => task.toolName))].join(' · ') : 'peer_comparison · read:demo-peers'}</div></div><div className="approval-actions"><Button disabled={thread.loading} onClick={() => onAction('APPROVE')}>{thread.loading ? '执行中…' : mode === 'api' ? '批准并执行' : '批准演示步骤'}</Button>{mode === 'api' && <Button variant="outline" disabled={thread.loading} onClick={() => setEditingVersion(versionKey)}>修改计划</Button>}<Button variant="outline" disabled={thread.loading} onClick={() => onAction('REJECT')}>拒绝计划</Button></div></section>}
+    {thread.status === 'approval' && (mode === 'api'
+      ? <PlanRevision key={versionKey} thread={thread} onRevise={onRevise} onAction={onAction} />
+      : <section className="approval-card"><div className="approval-icon"><LockKeyhole /></div><div><h3>允许扩展行业对比样本？</h3><p>演示请求将增加一次本地工具步骤。</p><div className="permission-line"><ShieldCheck /> peer_comparison · read:demo-peers</div></div><div className="approval-actions"><Button onClick={() => onAction('APPROVE')}>批准演示步骤</Button><Button variant="outline" onClick={() => onAction('REJECT')}>拒绝计划</Button></div></section>)}
     {['failed','partial'].includes(thread.status) && <section className="failure-card"><div><strong>{thread.status === 'partial' ? '研究部分完成' : '执行已停止'}</strong><p>{mode === 'api' ? retryFailed ? `有 ${failedTasks.length} 项失败。每次只重试失败项一次，沿用原审批与参数，保留成功证据；调用预算不重置。` : '请在 Trace 和报告中查看停止原因。恢复仅继续未完成任务；规划失败请新建研究。' : '模拟工具超时。最近检查点仍可用于恢复。'}</p>{retryFailed && <ul className="mt-2 space-y-1 text-xs">{failedTasks.map(task => <li key={task.id}>{task.title}：{task.error ?? '执行失败'} · 累计 {task.attempts} 次尝试</li>)}</ul>}</div><Button disabled={thread.loading || (mode === 'api' && thread.approval !== 'approved')} onClick={() => onAction(mode === 'api' ? retryFailed ? 'RETRY_FAILED' : 'RESUME' : 'RECOVER')}><RotateCcw />{retryFailed ? '重试失败任务' : '从检查点恢复'}</Button></section>}
   </div>;
 }

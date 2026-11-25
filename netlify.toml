@@ -6,6 +6,7 @@
 [build.environment]
   NODE_VERSION = "24"
   NEXT_PUBLIC_API_BASE_URL = "https://investment-x-buddy.onrender.com"
+  NEXT_PUBLIC_ENABLE_DEMO = "false"
 
 # Frontend is a fully client-side, static Next.js app: build with static export
 # (`output: "export"`) and publish the `frontend/out` directory. `.next` is a

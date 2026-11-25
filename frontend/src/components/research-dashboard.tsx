@@ -29,7 +29,7 @@ export function ResearchDashboard() {
   const active = threads.find(thread => thread.id === activeId) ?? threads[0];
   const documents = useDocumentConversation(activeId);
   const [goal, setGoal] = useState(active.goal);
-  const [mode, setMode] = useState<AppMode>(configuredMode);
+  const mode: AppMode = configuredMode;
   const [apiError, setApiError] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [expanded, setExpanded] = useState<number | null>(0);
@@ -182,11 +182,11 @@ export function ResearchDashboard() {
     setThreads(list => [next, ...list]); setActiveId(id); setGoal(''); setSidebarOpen(false);
   };
   const setTab = (tab: WorkspaceTab) => updateById(active.id, thread => ({ ...thread, tab }));
-  const revisePlan = async (nextGoal: string, excludedTools: string[]) => {
+  const revisePlan = async (nextGoal: string, excludedTools: string[], feedback?: string) => {
     if (!active.remoteRunId || !active.planVersion || !active.remoteUpdatedAt) return '请刷新计划后再试。';
     updateById(active.id, thread => ({ ...thread, loading: true }));
     try {
-      const result = await researchApi.revisePlan(active.remoteRunId, active.planVersion, active.remoteUpdatedAt, nextGoal, excludedTools);
+      const result = await researchApi.revisePlan(active.remoteRunId, active.planVersion, active.remoteUpdatedAt, nextGoal, excludedTools, feedback);
       if (!result.ok) return result.error;
       if (!await refreshRun(active.remoteRunId, active.id)) return '新版已保存，请刷新查看。';
       setExpanded(null);
@@ -213,7 +213,7 @@ export function ResearchDashboard() {
         </div>
       </div>
     </section>
-    <AgentMonitor thread={active} mode={mode} apiError={apiError} onOpenPreferences={() => setPrefsOpen(true)} onSwitchDemo={() => { setMode('demo'); setApiError(null); }} />
+    <AgentMonitor thread={active} mode={mode} apiError={apiError} onOpenPreferences={() => setPrefsOpen(true)} />
     <DetailDialog open={!!selectedEvidence} onOpenChange={open => !open && setEvidenceId(null)} title={`${selectedEvidence?.id ?? ''} · ${selectedEvidence?.title ?? ''}`} description={`${selectedEvidence?.type ?? ''} · ${selectedEvidence?.period ?? ''}`}>
       {selectedEvidence && <div className="dialog-copy">
         {apiEvidence ? <EvidenceTable item={apiEvidence} /> : <pre className="evidence-json">{selectedEvidence.detail}</pre>}

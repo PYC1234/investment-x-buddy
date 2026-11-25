@@ -17,7 +17,7 @@ export interface ApiThread { id: string; title: string; created_at: string; upda
 export interface RunBundle { run: ApiRun; events: ApiEvent[]; evidence: ApiEvidence[]; toolCalls: ApiToolCall[]; checkpoints: ApiCheckpoint[]; memory: Record<string, unknown>; tools: ApiTool[]; report: ApiReport | null }
 
 const rawBase = process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/$/, '');
-export const configuredMode: AppMode = rawBase ? 'api' : 'demo';
+export const configuredMode: AppMode = !rawBase && process.env.NEXT_PUBLIC_ENABLE_DEMO === 'true' ? 'demo' : 'api';
 
 async function request<T>(path: string, init?: RequestInit): Promise<ApiResult<T>> {
   if (!rawBase) return { ok: false, error: '未配置 NEXT_PUBLIC_API_BASE_URL' };
@@ -146,9 +146,9 @@ export const researchApi = {
   attachAnnualReport: (id: string, payload: {filename: string; content_base64: string; plan_version: number; expected_updated_at: string; confirmed: boolean; page_offset: number}) =>
     request<ApiRun>(`/api/v1/runs/${encodeURIComponent(id)}/annual-report`, { method: 'POST', body: JSON.stringify(payload) }),
   getRunBundle: loadRunBundle,
-  revisePlan: (id: string, planVersion: number, updatedAt: string, goal: string, excludedTools: string[]) => request<ApiRun>(
+  revisePlan: (id: string, planVersion: number, updatedAt: string, goal: string, excludedTools: string[], feedback?: string) => request<ApiRun>(
     `/api/v1/runs/${encodeURIComponent(id)}/revise-plan`,
-    { method: 'POST', body: JSON.stringify({ plan_version: planVersion, expected_updated_at: updatedAt, goal, excluded_tools: excludedTools }) },
+    { method: 'POST', body: JSON.stringify({ plan_version: planVersion, expected_updated_at: updatedAt, goal, excluded_tools: excludedTools, feedback }) },
   ),
   approve: (id: string, planVersion: number, allowedTools: string[], signal?: AbortSignal) => request<ApiRun>(`/api/v1/runs/${id}/approve`, { method: 'POST', body: JSON.stringify({ plan_version: planVersion, allowed_tools: allowedTools }), signal }),
   reject: (id: string, planVersion: number, reason: string, signal?: AbortSignal) => request<ApiRun>(`/api/v1/runs/${id}/reject`, { method: 'POST', body: JSON.stringify({ plan_version: planVersion, reason }), signal }),

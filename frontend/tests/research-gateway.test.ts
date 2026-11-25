@@ -99,7 +99,9 @@ test('审批页面渲染标的、范围、缺口与批准按钮', () => {
   assert.match(html, /年度利润表/);
   assert.match(html, /不良贷款率尚未接入/);
   assert.match(html, /批准并执行/);
-  assert.match(html, /修改计划/);
+  assert.match(html, /<textarea id="research-plan-feedback"/);
+  assert.match(html, /生成新版计划/);
+  assert.doesNotMatch(html, /推进下一演示步骤|模拟工具失败/);
 });
 
 
