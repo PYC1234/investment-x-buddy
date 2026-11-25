@@ -101,7 +101,7 @@ class RunService:
         self._save_checkpoint(run_id, "PENDING_APPROVAL")
         return self.get_run(run_id)
 
-    async def _build_plan(self, request: CreateRunRequest, preferences: dict[str, Any]):
+    async def _build_plan(self, request: CreateRunRequest, preferences: dict[str, Any], planner: Planner | None = None):
         from app.services.annual_update import annual_update_year, build_annual_update
         from app.schemas.research import PlannedTask
         from app.services.planner import PlanResult
@@ -109,7 +109,7 @@ class RunService:
 
         year = request.annual_scope.fiscal_year if request.annual_scope else annual_update_year(request.goal)
         if year is None:
-            result = await self.planner.plan(request.goal, preferences)
+            result = await (planner or self.planner).plan(request.goal, preferences)
             if result.plan.research_type == "profitability":
                 from app.services.fuyao import FUYAO_STATEMENTS
                 from app.services.research_sources import SUPPLEMENT_TOOLS
@@ -173,22 +173,69 @@ class RunService:
         goal = revision.goal.strip()
         excluded = set(revision.excluded_tools)
         feedback = revision.feedback.strip()
-        if feedback:
+        interpretation = None
+        model_prompt = model_completion = 0
+        previous_tools = {task["tool_name"]: task["title"] for task in run["plan"]["tasks"]}
+        if not excluded <= previous_tools.keys():
+            raise AppError(status_code=422, code="unknown_excluded_tool", message="只能取消当前计划里的工具。")
+        if feedback and self.settings.llm_configured:
+            from app.services.plan_feedback import interpret_feedback
+            try:
+                interpretation, model_prompt, model_completion = await interpret_feedback(
+                    self.settings, self.registry, goal, run["plan"], feedback,
+                )
+            except httpx.TimeoutException:
+                return {"status": "MODEL_UNAVAILABLE", "clarification": "模型请求超时。意见已保留，可以重试或直接编辑研究要求和工具。"}
+            except httpx.HTTPStatusError as exc:
+                status = exc.response.status_code
+                if status in {401, 403}:
+                    message = "模型服务拒绝了本地配置的访问权限，请检查模型接口配置。"
+                elif status == 429:
+                    message = "模型服务请求过于频繁，稍等后可使用原意见重试。"
+                else:
+                    message = f"模型服务返回错误（HTTP {status}），可以用原意见重试。"
+                return {"status": "MODEL_UNAVAILABLE", "clarification": message}
+            except httpx.RequestError:
+                return {"status": "MODEL_UNAVAILABLE", "clarification": "无法连接模型服务。意见已保留，可以重试或直接编辑。"}
+            except ValueError:
+                return {"status": "MODEL_UNAVAILABLE", "clarification": "模型返回的计划建议未通过校验。已尝试纠正，原计划仍保留。可以重试或直接编辑。"}
+            if interpretation.clarification:
+                return {"status": "NEEDS_CLARIFICATION", "clarification": interpretation.clarification}
+            if interpretation.focus and interpretation.focus != run["plan"]["research_type"]:
+                focus_label = {"profitability": "盈利能力", "valuation": "估值", "risk": "风险", "comprehensive": "综合研究"}
+                try:
+                    goal = f"分析 {resolve_symbol(goal)} 的{focus_label[interpretation.focus]}"
+                except SymbolResolutionError as exc:
+                    return {"status": "NEEDS_CLARIFICATION", "clarification": str(exc)}
+            if interpretation.fiscal_year:
+                try:
+                    goal = f"{resolve_symbol(goal)} {interpretation.fiscal_year} 年财报更新"
+                except SymbolResolutionError as exc:
+                    return {"status": "NEEDS_CLARIFICATION", "clarification": str(exc)}
+            excluded.update(interpretation.remove_tools)
+        elif feedback:
             try:
                 goal, removed = self._apply_plan_feedback(goal, feedback, run["plan"]["tasks"])
             except SymbolResolutionError as exc:
                 raise AppError(status_code=422, code="invalid_revised_scope", message=str(exc)) from exc
             excluded.update(removed)
-        if not excluded and goal == run["goal"]:
+        if not interpretation and not excluded and goal == run["goal"]:
             raise AppError(status_code=422, code="plan_unchanged", message="请修改研究要求或取消不需要的工具。")
-        if not excluded <= {task["tool_name"] for task in run["plan"]["tasks"]}:
-            raise AppError(status_code=422, code="unknown_excluded_tool", message="只能取消当前计划里的工具。")
         try:
             if goal == run["goal"]:
                 result = PlanResult(ResearchPlan.model_validate(run["plan"]), run["planner_mode"])
             else:
                 preferences = self.get_memory(run["thread_id"]).get("research_preferences", {})
-                result = await self._build_plan(CreateRunRequest(goal=goal), preferences)
+                result = await self._build_plan(CreateRunRequest(goal=goal), preferences, FixturePlanner() if interpretation else None)
+            candidate_tools = {task.tool_name: task.title for task in result.plan.tasks}
+            if interpretation and interpretation.require_tools:
+                # A narrower feedback request must not inherit every new tool from the preset.
+                required = set(interpretation.require_tools)
+                by_key = {task.task_key: task for task in result.plan.tasks}
+                for task in reversed(result.plan.tasks):
+                    if task.tool_name in required or (task.tool_name in previous_tools and task.tool_name not in excluded):
+                        required.update(by_key[key].tool_name for key in task.depends_on)
+                excluded.update(candidate_tools.keys() - previous_tools.keys() - required)
             if excluded:
                 tasks = [task for task in result.plan.tasks if task.tool_name not in excluded]
                 if not tasks:
@@ -206,15 +253,34 @@ class RunService:
             raise AppError(status_code=422, code="invalid_revised_scope", message=str(exc)) from exc
         except ValueError as exc:
             message = str(exc) if str(exc).startswith(("请", "保留", "年度")) else "无法生成有效计划。请明确标的、研究重点和财年。"
+            if interpretation:
+                return {"status": "NEEDS_CLARIFICATION", "clarification": message}
             raise AppError(status_code=422, code="invalid_revised_plan", message=message) from exc
         except (httpx.HTTPError, RuntimeError, KeyError) as exc:
             raise AppError(status_code=502, code="planner_failed", message="生成新版计划失败，原计划仍可使用。") from exc
 
+        revised_tools = {task.tool_name: task.title for task in result.plan.tasks}
+        if interpretation and not set(interpretation.require_tools) <= revised_tools.keys():
+            return {"status": "NEEDS_CLARIFICATION", "clarification": "当前研究范围无法安排你要求的全部工具。请明确优先研究盈利、估值还是指定财年的年报。"}
+        if interpretation and goal == run["goal"] and revised_tools.keys() == previous_tools.keys():
+            absent = excluded - previous_tools.keys() - candidate_tools.keys()
+            if absent:
+                if absent <= {"find_official_annual_report", "search_company_filings"}:
+                    return {"status": "NO_CHANGE", "clarification": "当前计划没有年报查询任务，无需取消。"}
+                return {"status": "NO_CHANGE", "clarification": f"{interpretation.summary}。当前计划没有对应任务，无需取消。"}
+            return {"status": "NO_CHANGE", "clarification": f"{interpretation.summary}。当前计划已覆盖这项要求，无需修改。"}
         version = revision.plan_version + 1
         timestamp = now_iso()
-        prompt_tokens = run["prompt_tokens"] + result.prompt_tokens
-        completion_tokens = run["completion_tokens"] + result.completion_tokens
+        prompt_tokens = run["prompt_tokens"] + result.prompt_tokens + model_prompt
+        completion_tokens = run["completion_tokens"] + result.completion_tokens + model_completion
         plan_data = result.plan.model_dump()
+        if interpretation:
+            plan_data["revision_note"] = {
+                "understood": interpretation.summary,
+                "added": [title for name, title in revised_tools.items() if name not in previous_tools],
+                "removed": [title for name, title in previous_tools.items() if name not in revised_tools],
+                "kept": [title for name, title in revised_tools.items() if name in previous_tools],
+            }
         with self.store.connection() as con:
             con.execute("BEGIN IMMEDIATE")
             changed = con.execute(

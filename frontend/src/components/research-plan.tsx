@@ -8,27 +8,26 @@ import type { ResearchThread } from '@/types/research';
 
 type Action = 'APPROVE'|'REJECT'|'PAUSE'|'RESUME'|'CANCEL'|'FAIL'|'RECOVER'|'TICK'|'RETRY_FAILED';
 
-type Revise = (goal: string, excludedTools: string[], feedback?: string) => Promise<string | null>;
+type Revise = (goal: string, excludedTools: string[], feedback?: string) => Promise<{ message: string; error: boolean } | null>;
 
 function PlanRevision({ thread, onRevise, onAction }: { thread: ResearchThread; onRevise: Revise; onAction: (action: Action) => void }) {
   const [goal, setGoal] = useState(thread.goal);
   const [feedback, setFeedback] = useState('');
   const [excluded, setExcluded] = useState<string[]>([]);
-  const [error, setError] = useState<string | null>(null);
+  const [response, setResponse] = useState<{ message: string; error: boolean } | null>(null);
   const tools = [...new Map((thread.tasks ?? []).map(task => [task.toolName, task.title])).entries()];
   const changed = goal.trim() !== thread.goal || excluded.length > 0 || feedback.trim().length > 0;
   return <form className="card space-y-3 p-5" onSubmit={async event => {
     event.preventDefault();
-    setError(null);
-    const failure = await onRevise(goal.trim(), excluded, feedback.trim());
-    if (failure) setError(failure);
+    setResponse(null);
+    setResponse(await onRevise(goal.trim(), excluded, feedback.trim()));
   }}>
     <h3 className="font-semibold">确认 Plan v{thread.planVersion}</h3>
     <p className="text-sm text-slate-600">计划合适就批准执行。需要调整时，先提交修改意见，再核对新版计划。</p>
     <label className="block text-sm font-medium" htmlFor="research-plan-feedback">修改意见</label>
     <textarea id="research-plan-feedback" className="w-full rounded border p-2 text-sm" value={feedback}
       onChange={event => setFeedback(event.target.value)} disabled={thread.loading} rows={3} maxLength={500}
-      placeholder="例如：取消官方年报，或改为估值" />
+      placeholder="例如：先别看股价，我想知道利润有没有现金流支撑。" />
     <details className="space-y-2">
       <summary className="cursor-pointer text-sm">直接编辑研究要求或工具</summary>
       <label className="block text-sm font-medium" htmlFor="revised-research-goal">研究要求</label>
@@ -45,12 +44,12 @@ function PlanRevision({ thread, onRevise, onAction }: { thread: ResearchThread; 
       </label>)}
     </fieldset>}
     </details>
-    {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
+    {response && <p role={response.error ? 'alert' : 'status'} className={response.error ? 'text-sm text-red-700' : 'rounded bg-slate-50 p-3 text-sm'}>{response.message}</p>}
     <div className="flex flex-wrap gap-2">
       <Button type="submit" disabled={thread.loading || !changed || goal.trim().length < 3 || (goal.trim() === thread.goal && excluded.length === tools.length)}>{thread.loading ? '生成中…' : '生成新版计划'}</Button>
       <Button type="button" disabled={thread.loading || changed} onClick={() => onAction('APPROVE')}>批准并执行</Button>
       {changed && <Button type="button" variant="outline" disabled={thread.loading} onClick={() => {
-        setGoal(thread.goal); setFeedback(''); setExcluded([]); setError(null);
+        setGoal(thread.goal); setFeedback(''); setExcluded([]); setResponse(null);
       }}>清空修改</Button>}
       <Button type="button" variant="outline" disabled={thread.loading} onClick={() => onAction('REJECT')}>拒绝计划</Button>
     </div>
@@ -59,6 +58,7 @@ function PlanRevision({ thread, onRevise, onAction }: { thread: ResearchThread; 
 
 export function ResearchPlan({ thread, expanded, setExpanded, onAction, onRevise, mode }: { thread: ResearchThread; expanded: number | null; setExpanded: (n: number | null) => void; onAction: (action: Action) => void; onRevise: Revise; mode: AppMode }) {
   const versionKey = `${thread.remoteRunId}:${thread.planVersion}`;
+  const revision = thread.researchScope?.revisionNote;
   const taskTitles = new Map(thread.tasks?.map(task => [task.taskKey, task.title]));
   const plannedTools = new Set(thread.tasks?.map(task => task.toolName));
   const sources = [...new Set(thread.apiTools?.filter(tool => plannedTools.has(tool.name)).map(tool => ({
@@ -82,6 +82,12 @@ export function ResearchPlan({ thread, expanded, setExpanded, onAction, onRevise
         <div><dt className="inline text-slate-500">工具来源：</dt><dd className="inline">{sources.length ? sources.join('、') : '来源以执行后的证据为准'}</dd></div>
       </dl>
       <div className="mt-3 rounded-md bg-amber-50 p-3 text-xs leading-6 text-amber-900"><strong>待核验与限制</strong><ul className="list-disc pl-4">{(thread.researchScope?.limitations.length ? thread.researchScope.limitations : ['标的存在与数据覆盖将在执行时验证。']).map(item => <li key={item}>{item}</li>)}</ul>{thread.status === 'approval' && <p>请核对标的、研究重点和工具。你可以先修改计划，再批准执行。</p>}</div>
+    </section>}
+    {revision && thread.status === 'approval' && <section className="card space-y-2 p-5" aria-label="本次计划修改">
+      <h3 className="font-semibold">本次计划修改</h3>
+      <p className="text-sm">{revision.understood}</p>
+      {([['新增', revision.added], ['移除', revision.removed], ['保留', revision.kept]] as const).map(([label, items]) =>
+        items.length > 0 && <p key={label} className="text-sm"><strong>{label}</strong> {items.join('、')}</p>)}
     </section>}
     <section className="card plan-card">
       <div className="card-heading"><h2>研究执行计划 <span>{steps.length} 步 · {mode === 'api' ? ({ fixture: '规则规划', deepseek: 'DeepSeek 规划', annual_update: '年报研究规划' }[thread.plannerMode ?? ''] ?? '后端规划') : '本地演示'}</span></h2><div className="run-actions">

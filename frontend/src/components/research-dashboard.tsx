@@ -183,12 +183,13 @@ export function ResearchDashboard() {
   };
   const setTab = (tab: WorkspaceTab) => updateById(active.id, thread => ({ ...thread, tab }));
   const revisePlan = async (nextGoal: string, excludedTools: string[], feedback?: string) => {
-    if (!active.remoteRunId || !active.planVersion || !active.remoteUpdatedAt) return '请刷新计划后再试。';
+    if (!active.remoteRunId || !active.planVersion || !active.remoteUpdatedAt) return { message: '请刷新计划后再试。', error: true };
     updateById(active.id, thread => ({ ...thread, loading: true }));
     try {
       const result = await researchApi.revisePlan(active.remoteRunId, active.planVersion, active.remoteUpdatedAt, nextGoal, excludedTools, feedback);
-      if (!result.ok) return result.error;
-      if (!await refreshRun(active.remoteRunId, active.id)) return '新版已保存，请刷新查看。';
+      if (!result.ok) return { message: result.error, error: true };
+      if ('clarification' in result.data) return { message: result.data.clarification, error: false };
+      if (!await refreshRun(active.remoteRunId, active.id)) return { message: '新版已保存，请刷新查看。', error: false };
       setExpanded(null);
       return null;
     } finally {
