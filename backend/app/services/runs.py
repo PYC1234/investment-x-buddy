@@ -70,6 +70,7 @@ class RunService:
             from app.services.annual_update import AnnualScopeError, annual_update_year, build_annual_update
             from app.schemas.research import PlannedTask
             from app.services.planner import PlanResult
+            from app.services.official_filings import OFFICIAL_FILING_TOOL
 
             year = request.annual_scope.fiscal_year if request.annual_scope else annual_update_year(request.goal)
             if year is None:
@@ -94,6 +95,22 @@ class RunService:
                 plan = build_annual_update(request.goal, request.annual_scope.symbol if request.annual_scope else resolve_symbol(request.goal), year,
                                            self.settings.research_data_dir)
                 result = PlanResult(plan, "annual_update")
+            if result.plan.research_type == "profitability" and OFFICIAL_FILING_TOOL in self.registry.names():
+                financial = next((task for task in result.plan.tasks if task.tool_name == "get_financial_summary"), None)
+                planned = {task.tool_name for task in result.plan.tasks}
+                if (financial and OFFICIAL_FILING_TOOL not in planned
+                        and "search_company_filings" not in planned and len(result.plan.tasks) < 8):
+                    result.plan.tasks.append(PlannedTask(
+                        task_key="official_annual_filing", title="查找同财年官方年报",
+                        tool_name=OFFICIAL_FILING_TOOL, arguments={"symbol": financial.arguments["symbol"], "fiscal_year": year},
+                        depends_on=[financial.task_key] if year is None and financial.task_key else [],
+                        rationale="通过巨潮资讯检索同标的年报，引用支持盈利变化的原文与页码。",
+                    ))
+                    result.plan.scope.append("通过巨潮资讯定位官方年报")
+                    if year is not None:
+                        result.plan.limitations = [
+                            "年报扫描覆盖有限，未找到对应管理层解释时保留缺口。"
+                        ]
             for task in result.plan.tasks:
                 if task.tool_name == "read_uploaded_annual_report":
                     raise ValueError("Uploaded PDF evidence requires an owned run and supplemental approval")
@@ -208,13 +225,20 @@ class RunService:
         if run['planner_mode'] == 'annual_update':
             from app.services.annual_evidence import annual_answers
             report['annual_answers'] = annual_answers(evidence, run['tasks'][0]['arguments']['fiscal_year'])
+        elif report['research_review']['research_type'] == 'profitability':
+            from app.services.annual_evidence import annual_answers
+            income = next((item for item in evidence if item['tool_name'] == 'get_financial_summary'
+                           and not item['is_demo'] and item['data'].get('quality', {}).get('usable', True)), None)
+            if income and income['data'].get('fiscal_year'):
+                report['annual_answers'] = annual_answers(evidence, income['data']['fiscal_year'])[2:]
         supplemental = {e['tool_name'] for e in evidence if e['data'].get('dataset') and e['data'].get('quality', {}).get('usable', True)}
         if supplemental:
             labels = sorted({e['data'].get('data_label', 'DEMO DATA' if e['is_demo'] else 'UNSPECIFIED SOURCE') for e in evidence})
             report['data_notice'] = ' · '.join(labels) + '；各条证据来源与时点独立；演示样本不得用作真实判断。'
             report['missing_information'] = [message for message in report['missing_information']
                 if not any(text in message for text in ('缺少历史估值区间、同业比较及完整财务报表', 'PB 为 MRQ 口径；本接口不提供', '利润表不提供 ROE；未取得资产负债表与现金流量表'))]
-            report['missing_information'].append('导入资料仅覆盖提供的样本；仍需人工核验来源、可比性、新鲜度和覆盖完整性，不计算目标价。')
+            if any(e['data'].get('data_label') == 'IMPORTED PUBLIC SOURCES' for e in evidence):
+                report['missing_information'].append('导入资料仅覆盖提供的样本；仍需核验可比性、新鲜度和覆盖完整性。')
             if {'get_valuation_history','get_peer_valuations'} <= supplemental:
                 for finding in report['findings']:
                     finding['statement'] = finding['statement'].replace('缺少同业和历史区间，不能单凭倍数认定低估或高估。', '另有导入历史与同业样本；样本完整性及可比性尚未独立核验，不能单凭倍数认定低估或高估。')
@@ -544,6 +568,9 @@ def build_run_service(settings: Settings) -> RunService:
     registry = build_fuyao_registry(settings.fuyao_api_key) if settings.finance_provider_configured else build_tool_registry()
     from app.services.research_sources import register_source_tools
     register_source_tools(registry, settings.research_data_dir)
+    from app.services.official_filings import register_official_filings
+    if settings.finance_provider_configured:
+        register_official_filings(registry)
     planner: Planner = FixturePlanner() if settings.planner_mode == "fixture" else DeepSeekPlanner(settings, registry)
     return RunService(settings, SQLiteStore(settings.sqlite_path), registry, planner)
 

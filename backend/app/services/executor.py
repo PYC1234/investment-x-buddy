@@ -7,6 +7,7 @@ from uuid import uuid4
 from app.core.errors import AppError
 from app.services.evidence_quality import assess_evidence
 from app.services.jobs import owns
+from app.services.official_filings import OFFICIAL_FILING_TOOL
 from app.services.tools import ToolExecutionError
 
 
@@ -52,7 +53,15 @@ async def execute(service, run_id, retry_ids, token):
             service._fail_task(task, 'Task is outside the approved plan version/tool scope.')
             return
         try:
-            args = service.registry.validate(task['tool_name'], task['arguments'])
+            arguments = task['arguments']
+            if task['tool_name'] == OFFICIAL_FILING_TOOL and arguments.get('fiscal_year') is None:
+                dependencies = {item['id'] for item in service.get_run(run_id)['tasks']
+                                if item['task_key'] in task['depends_on'] and item['tool_name'] == 'get_financial_summary'}
+                year = next((item['data'].get('fiscal_year') for item in service.get_evidence(run_id)
+                             if item['task_id'] in dependencies and not item['is_demo']
+                             and item['data'].get('quality', {}).get('usable', True)), None)
+                arguments = {**arguments, 'fiscal_year': year}
+            args = service.registry.validate(task['tool_name'], arguments)
         except ValueError:
             service._fail_task(task, 'Invalid tool arguments')
             return
@@ -77,7 +86,7 @@ async def execute(service, run_id, retry_ids, token):
             try:
                 result, _ = await asyncio.wait_for(asyncio.to_thread(service.registry.execute, task['tool_name'], args), timeout=max(0.01, remaining()))
                 # Imported bundles have their own typed validation and provenance contract.
-                if result.get('is_demo') is False and result.get('data_label') not in {'IMPORTED PUBLIC SOURCES', 'USER UPLOADED REPORT'}:
+                if result.get('is_demo') is False and task['tool_name'] != OFFICIAL_FILING_TOOL and result.get('data_label') not in {'IMPORTED PUBLIC SOURCES', 'USER UPLOADED REPORT'}:
                     result['quality'] = assess_evidence(task['tool_name'], result, task['arguments']['symbol'])
             except asyncio.TimeoutError:
                 error = 'Tool timed out; underlying read-only request may finish without being committed'

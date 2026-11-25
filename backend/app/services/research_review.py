@@ -19,7 +19,7 @@ def review_research(goal, tasks, evidence, registry, data_dir, rounds, max_round
     usable = {e['tool_name'] for e in evidence if e['data'].get('available', True)
               and e['data'].get('quality', {}).get('usable', True)
               and (year is None or (not e['is_demo'] and str(e['data'].get('fiscal_year')) == str(year)))}
-    if year is not None and 'read_uploaded_annual_report' in usable:
+    if year is not None and {'read_uploaded_annual_report', 'find_official_annual_report'} & usable:
         usable.add('search_company_filings')
     if year is None:
         income_years = {str(item['data'].get('fiscal_year')) for item in evidence

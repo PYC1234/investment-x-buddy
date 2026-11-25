@@ -6,7 +6,7 @@ from pydantic import Field
 from app.services.tools import RegisteredTool, StockArgs
 
 UPLOAD_TOOL = "read_uploaded_annual_report"
-FILING_TOOLS = {"search_company_filings", UPLOAD_TOOL}
+FILING_TOOLS = {"search_company_filings", UPLOAD_TOOL, "find_official_annual_report"}
 TOPICS = {
     "revenue": ("营业收入", "营收"),
     "profit": ("归母净利润", "归属于上市公司股东的净利润", "净利润", "利润总额"),
