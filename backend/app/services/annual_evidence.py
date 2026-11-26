@@ -16,14 +16,23 @@ CAUSE = r"(?:原因(?:说明)?[：:]|主要(?:是|由于|因为|系|受)|得益�
 SECTIONS = r"主营业务分析|收入与成本|收入和成本分析|管理层讨论与分析|变动分析"
 
 
-def direct_topics(text):
+def direct_explanation(text, topic):
     compact = re.sub(r"\s+", "", text)
-    found = []
-    for key, terms in TOPICS.items():
-        metric = "(?:" + "|".join(terms) + ")"
-        if re.search(rf"{metric}[^。！？；;，,]{{0,20}}{CHANGE}[^。！？；;，,]{{0,20}}[，,]?{CAUSE}[：:，,]?[^。！？；;]{{3,}}", compact):
-            found.append(key)
-    return found
+    metric = "(?:" + "|".join(TOPICS[topic]) + ")"
+    match = re.search(rf"{metric}[^。！？；;，,]{{0,20}}{CHANGE}[^。！？；;，,]{{0,20}}[，,]?{CAUSE}[：:，,]?[^。！？；;]{{3,}}[。！？；;]?", compact)
+    return match[0] if match else None
+
+
+def annual_cash_explanation(text):
+    compact = re.sub(r"\s+", "", text)
+    match = re.search(r"(?:经营活动产生的现金流量净额|经营活动现金流量净额|经营现金流净额)"
+                      r"(?:变动|变化|下降|减少|增长|增加)(?:的)?原因(?:说明)?[：:]"
+                      r"([^。！？；;]{3,260}[。！？；;])", compact)
+    return match[1] if match else None
+
+
+def direct_topics(text):
+    return [topic for topic in TOPICS if direct_explanation(text, topic)]
 
 
 def ranked_passages(records, limit):

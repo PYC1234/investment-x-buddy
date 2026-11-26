@@ -1,12 +1,15 @@
 import { datasets, evidence, initialThreads, toolsRegistry } from '@/data/demo';
 import { privateFetch } from './identity';
 import type { AnnualAnswer, AnnualScope, ApiRunStatus, Dataset, PlanRevisionNote, Preferences, ResearchEvidence, ResearchReportData, ResearchTask, ResearchThread, ToolCall, ToolDefinition, TraceEvent, ResearchReviewData, ReportValidation } from '@/types/research';
+import type { FindingDetails, FilingComparison, FollowupAnswer } from '@/types/research';
 
 export type AppMode = 'api' | 'demo';
 export type ApiResult<T> = { ok: true; data: T } | { ok: false; error: string };
 export interface ApiTask { id: string; position: number; title: string; tool_name: string; arguments: Record<string, unknown>; rationale: string; status: string; attempts: number; evidence_id: string | null; error: string | null; task_key?: string; depends_on?: string[] }
 export interface ApiPlan { research_type?: string; scope?: string[]; limitations?: string[]; revision_note?: PlanRevisionNote; research_goal: string; tasks: Array<{ title: string; tool_name: string; arguments: Record<string, unknown>; rationale: string; question?: string; completion_criteria?: string[] }> }
-export interface ApiReport { annual_answers?: AnnualAnswer[]; title: string; status: string; data_notice: string; quality_status?: string; executive_summary: string; findings: Array<{ task: string; statement: string; evidence_ids: string[] }>; missing_information: string[]; evidence_ids: string[]; research_review?: ResearchReviewData; validation?: ReportValidation }
+interface ApiFinding extends FindingDetails { task: string; statement: string; evidence_ids: string[] }
+export interface ApiReport { annual_answers?: AnnualAnswer[]; period?: string | null; requested_period?: string; comparisons?: FilingComparison[]; title: string; status: string; data_notice: string; quality_status?: string; executive_summary: string; findings: ApiFinding[]; missing_information: string[]; evidence_ids: string[]; research_review?: ResearchReviewData; validation?: ReportValidation }
+interface ApiFollowup extends Omit<FollowupAnswer, 'findings'> { findings: ApiFinding[]; plan?: ApiRun }
 export interface ApiRun { id: string; thread_id: string; goal: string; status: ApiRunStatus; plan_version: number; planner_mode: string; plan: ApiPlan | null; approval: { plan_version: number; allowed_tools: string[]; approved_at: string } | null; report: ApiReport | null; error: string | null; created_at: string; updated_at: string; started_at: string | null; completed_at: string | null; tasks: ApiTask[]; usage: { prompt_tokens: number; completion_tokens: number; total_tokens: number; estimated_cost_usd: number | null; cost_status: string } }
 export interface ApiEvent { id: number; event_type: string; data: Record<string, unknown>; created_at: string }
 export interface ApiEvidence { id: string; task_id: string; tool_name: string; title: string; data: Record<string, unknown>; is_demo: boolean; created_at: string }
@@ -76,6 +79,7 @@ function formatMetric(value: unknown): string {
   return Number.isFinite(number) ? number.toFixed(2) : '—';
 }
 function evidencePeriod(item: ApiEvidence): string {
+  if (typeof item.data.period === 'string') return item.data.period;
   if (item.data.fiscal_year != null) return `${item.data.fiscal_year} 年度`;
   const timestamp = item.data.timestamp_ms;
   if (typeof timestamp === 'number' && Number.isFinite(timestamp)) return new Date(timestamp).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false }) + '（北京时间）';
@@ -86,11 +90,17 @@ function mapEvidence(item: ApiEvidence): ResearchEvidence {
   const limitation = [item.data.missing_information, ...(quality?.issues?.map(issue => issue.message) ?? [])].filter(Boolean).join('；');
   return { id: item.id, title: item.title, type: item.tool_name, period: evidencePeriod(item), detail: JSON.stringify(item.data, null, 2), limitation: limitation || (item.is_demo ? 'FIXTURE / DEMO DATA；并非实时金融数据。' : '质量未检查；扶摇接口时间不保证为成交时间，尚未交叉核验。'), isDemo: item.is_demo, toolName: item.tool_name, data: item.data };
 }
+function mapFinding({ evidence_ids, ...finding }: ApiFinding) {
+  return { ...finding, evidenceIds: evidence_ids };
+}
 function mapReport(report: ApiReport | null): ResearchReportData | null {
-  return report ? { annualAnswers: report.annual_answers, title: report.title, status: report.status, qualityStatus: report.quality_status ?? 'NOT_CHECKED', dataNotice: report.data_notice, executiveSummary: report.executive_summary, findings: report.findings.map(item => ({ task: item.task, statement: item.statement, evidenceIds: item.evidence_ids })), missingInformation: report.missing_information, evidenceIds: report.evidence_ids, review: report.research_review, validation: report.validation } : null;
+  return report ? { annualAnswers: report.annual_answers, period: report.period, requestedPeriod: report.requested_period,
+    comparisons: report.comparisons, title: report.title, status: report.status, qualityStatus: report.quality_status ?? 'NOT_CHECKED',
+    dataNotice: report.data_notice, executiveSummary: report.executive_summary, findings: report.findings.map(mapFinding),
+    missingInformation: report.missing_information, evidenceIds: report.evidence_ids, review: report.research_review, validation: report.validation } : null;
 }
 function evidenceDataset(items: ApiEvidence[], report: ApiReport | null): Dataset | null {
-  if (!items.length) return null;
+  if (!items.some(item => item.data.dataset !== 'periodic_filing')) return null;
   items = items.filter(item => (item.data.quality as { usable?: boolean } | undefined)?.usable !== false);
   if (!items.length) return { isDemo: false, metrics: [{ label: '市盈率 PE (TTM)', value: '—', unit: '倍', note: '证据质量未通过' }, { label: '市净率 PB', value: '—', unit: '倍', note: '证据质量未通过' }, { label: '净资产收益率 ROE', value: '—', unit: '%', note: '证据质量未通过' }], prices: [], financials: [], findings: [] };
   const snapshot = items.find(item => item.tool_name === 'get_market_snapshot')?.data;
@@ -142,13 +152,23 @@ export function applyBundle(thread: ResearchThread, bundle: RunBundle): Research
 export const researchApi = {
   tools: (signal?: AbortSignal) => request<ApiTool[]>('/api/v1/tools', { signal }),
   createRun: (goal: string, preferences: Preferences, signal?: AbortSignal, annualScope?: AnnualScope) => request<ApiRun>('/api/v1/runs', { method: 'POST', body: JSON.stringify({ goal, preferences, annual_scope: annualScope }), signal }),
+  followup: async (id: string, question: string, previousQuestion: string, draft: boolean) => {
+    const signal = draft ? undefined : AbortSignal.timeout(15000);
+    const result = await request<ApiFollowup>(`/api/v1/runs/${encodeURIComponent(id)}/followup`, {
+      method: 'POST', body: JSON.stringify({ question, previous_question: previousQuestion, draft }),
+      signal,
+    });
+    if (signal?.aborted) return { ok: false as const, error: '追问响应超时，已保留问题，可重新发送。' };
+    if (!result.ok) return result;
+    return { ok: true as const, data: { ...result.data, findings: result.data.findings.map(mapFinding) } };
+  },
   annualAvailability: (scope: AnnualScope) => request<{ filing_available: boolean }>(`/api/v1/annual-report-availability?symbol=${encodeURIComponent(scope.symbol)}&fiscal_year=${scope.fiscal_year}`),
   attachAnnualReport: (id: string, payload: {filename: string; content_base64: string; plan_version: number; expected_updated_at: string; confirmed: boolean; page_offset: number}) =>
     request<ApiRun>(`/api/v1/runs/${encodeURIComponent(id)}/annual-report`, { method: 'POST', body: JSON.stringify(payload) }),
   getRunBundle: loadRunBundle,
-  revisePlan: (id: string, planVersion: number, updatedAt: string, goal: string, excludedTools: string[], feedback?: string) => request<ApiRun | { status: 'NEEDS_CLARIFICATION' | 'NO_CHANGE' | 'MODEL_UNAVAILABLE'; clarification: string }>(
+  revisePlan: (id: string, planVersion: number, updatedAt: string, goal: string, excludedTools: string[], feedback?: string, fiscalYear?: number) => request<ApiRun | { status: 'NEEDS_CLARIFICATION' | 'NO_CHANGE' | 'MODEL_UNAVAILABLE'; clarification: string }>(
     `/api/v1/runs/${encodeURIComponent(id)}/revise-plan`,
-    { method: 'POST', body: JSON.stringify({ plan_version: planVersion, expected_updated_at: updatedAt, goal, excluded_tools: excludedTools, feedback }) },
+    { method: 'POST', body: JSON.stringify({ plan_version: planVersion, expected_updated_at: updatedAt, goal, excluded_tools: excludedTools, feedback, fiscal_year: fiscalYear }) },
   ),
   approve: (id: string, planVersion: number, allowedTools: string[], signal?: AbortSignal) => request<ApiRun>(`/api/v1/runs/${id}/approve`, { method: 'POST', body: JSON.stringify({ plan_version: planVersion, allowed_tools: allowedTools }), signal }),
   reject: (id: string, planVersion: number, reason: string, signal?: AbortSignal) => request<ApiRun>(`/api/v1/runs/${id}/reject`, { method: 'POST', body: JSON.stringify({ plan_version: planVersion, reason }), signal }),

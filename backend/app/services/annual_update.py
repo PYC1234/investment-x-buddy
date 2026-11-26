@@ -15,11 +15,20 @@ class AnnualScopeError(ValueError):
 
 
 def annual_update_year(goal: str) -> int | None:
-    if not re.search(r"财报更新|更新[^，。]{0,18}(?:财报|年报)|(?:财报|年报)[^，。]{0,12}更新", goal):
-        return None
+    annual_request = re.search(r"财报更新|更新[^，。]{0,18}(?:财报|年报)|(?:财报|年报)[^，。]{0,12}更新", goal)
     years = set(re.findall(r"(?<![0-9])(20[0-9]{2})(?=\s*年)", goal))
+    financial_question = re.search(r"年报|财报|营业收入|营收|归母净利润|利润|盈利", goal)
+    if not annual_request:
+        if not financial_question or re.search(r"季度|季报|半年|(?:Q[1-4])", goal, re.I):
+            return None
+        if len(years) == 2 and re.search(r"比|较|对照|对比", goal):
+            latest, prior = sorted(map(int, years), reverse=True)
+            if latest == prior + 1:
+                years = {str(latest)}
+        if len(years) != 1:
+            return None
     if len(years) != 1:
-        raise AnnualScopeError("请指定一个财年，或使用年度财报更新表单。")
+        raise AnnualScopeError("请在研究问题里指定一个财年，例如「查看贵州茅台 2025 年年报」。")
     year = int(years.pop())
     if not 2020 <= year <= 2030:
         raise AnnualScopeError("请选择 2020–2030 范围内的财年。")

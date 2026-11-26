@@ -65,3 +65,30 @@ export function ProfitabilityTable({ item, onOpen }: { item: ResearchEvidence; o
     {onOpen && <button className="citation mt-1" onClick={onOpen}>核对利润表证据</button>}
   </section>;
 }
+
+export function CashFlowComparison({ income, cashFlow, onEvidence }: {
+  income: ResearchEvidence; cashFlow: ResearchEvidence; onEvidence: (id: string) => void;
+}) {
+  const cashByPeriod = new Map(rows(cashFlow.data.records).map(row => [row.period, row.operating_cash_flow]));
+  const matched = rows(income.data.financial_history).flatMap(row => {
+    const year = String(row.year);
+    const cash = cashByPeriod.get(`${year}-12-31`);
+    if (!/^\d{4}$/.test(year) || typeof row.profit !== 'number' || !Number.isFinite(row.profit)
+        || typeof cash !== 'number' || !Number.isFinite(cash)) return [];
+    return [{ year, profit: row.profit, cash: cash / 1e8 }];
+  }).sort((a, b) => Number(b.year) - Number(a.year)).slice(0, 2);
+  if (!matched.length || income.data.symbol !== cashFlow.data.symbol) return null;
+  return <section className="answer-metrics" aria-label="同财年利润与现金流">
+    <h4>同财年利润与现金流</h4>
+    <div className="overflow-x-auto">
+      <table>
+        <thead><tr><th scope="col">指标（亿元）</th>{matched.map(row => <th key={row.year} scope="col">{row.year} 财年</th>)}<th scope="col">依据</th></tr></thead>
+        <tbody>
+          <tr><th scope="row">归母净利润</th>{matched.map(row => <td key={row.year}>{number(row.profit)}</td>)}<td><button className="citation" onClick={() => onEvidence(income.id)}>利润表</button></td></tr>
+          <tr><th scope="row">经营活动现金流量净额</th>{matched.map(row => <td key={row.year}>{number(row.cash)}</td>)}<td><button className="citation" onClick={() => onEvidence(cashFlow.id)}>现金流量表</button></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>经营现金流净额反映合并口径下的经营活动流入与流出，销售收现和期末货币资金应分别核对。</p>
+  </section>;
+}

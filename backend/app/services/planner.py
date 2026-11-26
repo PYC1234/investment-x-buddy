@@ -31,10 +31,11 @@ class DeepSeekPlanner:
         if not self.settings.llm_configured:
             raise RuntimeError("DeepSeek planner is selected but its configuration is incomplete.")
         from app.services.research_sources import SUPPLEMENT_TOOLS, available_sources
+        from app.services.periodic_filings import PERIODIC_TOOL
         symbol = resolve_symbol(goal)
         sources = available_sources(self.settings.research_data_dir, symbol)
         tool_specs = [item for item in self.registry.schemas()
-                      if item['name'] not in {'read_uploaded_annual_report', 'find_official_annual_report'}
+                      if item['name'] not in {'read_uploaded_annual_report', 'find_official_annual_report', PERIODIC_TOOL}
                       and (item['name'] not in SUPPLEMENT_TOOLS or item['name'] in sources)]
         instruction = (
             "Create a bounded investment research plan. Use only supplied tools and their actual data coverage. "
@@ -73,7 +74,10 @@ class DeepSeekPlanner:
                 completion_tokens += int(usage.get("completion_tokens") or 0)
                 try:
                     plan = ResearchPlan.model_validate(json.loads(content))
+                    allowed_tools = {tool["name"] for tool in tool_specs}
                     for task in plan.tasks:
+                        if task.tool_name not in allowed_tools:
+                            raise ValueError('Planner selected a tool outside the supplied research scope')
                         self.registry.validate(task.tool_name, task.arguments)
                         if task.arguments.get('symbol') != symbol:
                             raise ValueError('Stock differs from confirmed goal')

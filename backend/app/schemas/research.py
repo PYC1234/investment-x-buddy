@@ -111,7 +111,15 @@ class SupplementRequest(RetryFailedRequest):
     pass
 
 
+class FollowupRequest(BaseModel):
+    model_config = {"extra": "forbid"}
+    question: str = Field(min_length=2, max_length=450)
+    previous_question: str = Field(default="", max_length=450)
+    draft: bool = False
+
+
 class RevisePlanRequest(RetryFailedRequest):
     goal: str = Field(min_length=3, max_length=1000)
     excluded_tools: list[str] = Field(default_factory=list, max_length=8)
     feedback: str = Field(default="", max_length=500)
+    fiscal_year: int | None = Field(default=None, ge=2020, le=2030)

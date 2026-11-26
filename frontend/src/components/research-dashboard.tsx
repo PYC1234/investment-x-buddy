@@ -7,6 +7,7 @@ import { ResearchInput } from '@/components/research-input';
 import { useDocumentConversation } from '@/components/document-conversation';
 import { FinancialCharts, FinancialMetrics } from '@/components/financial-charts';
 import { ResearchReport } from '@/components/research-report';
+import { ResearchFollowup } from '@/components/research-followup';
 import { EvidenceTable } from '@/components/research-evidence-table';
 import { ResearchReview } from '@/components/research-review';
 import { consumeResearchEvents } from '@/lib/research-stream';
@@ -18,7 +19,7 @@ import { createThread, evidence, initialThreads } from '@/data/demo';
 import { transition } from '@/lib/demo-machine';
 import { identity, privateFetch } from '@/lib/identity';
 import { applyBundle, configuredMode, demoGateway, researchApi, type AppMode } from '@/lib/research-gateway';
-import type { AnnualScope, Preferences, ResearchThread, RunAction, WorkspaceTab } from '@/types/research';
+import type { Preferences, ResearchThread, RunAction, WorkspaceTab } from '@/types/research';
 
 const now = () => new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
 const pollable = new Set(['PLANNING', 'APPROVED', 'RUNNING']);
@@ -78,7 +79,12 @@ export function ResearchDashboard() {
     setApiError(null);
     setThreads(list => {
       const existing = list.find(thread => thread.id === targetId);
-      if (existing) return list.map(thread => thread.id === targetId ? applyBundle(thread, result.data) : thread);
+      if (existing) return list.map(thread => {
+        if (thread.id !== targetId) return thread;
+        const updated = applyBundle(thread, result.data);
+        return thread.tab === 'Plan' && thread.status === 'running' && result.data.report
+          && updated.status !== 'running' ? { ...updated, tab: 'Research' } : updated;
+      });
       const restoredThread = applyBundle(createThread(targetId, '自定义研究', '', result.data.run.goal), result.data);
       return [restoredThread, ...list];
     });
@@ -146,8 +152,8 @@ export function ResearchDashboard() {
     await refreshRun(active.remoteRunId, active.id);
   };
 
-  const start = async (scope?: AnnualScope) => {
-    const researchGoal = scope ? `${scope.symbol} ${scope.fiscal_year} 年财报更新` : goal;
+  const start = async () => {
+    const researchGoal = goal;
     if (documents.hasDocuments) {
       setTab('Research');
       await documents.send(goal);
@@ -159,7 +165,7 @@ export function ResearchDashboard() {
     }
     setApiError(null);
     updateById(active.id, thread => ({ ...thread, loading: true, status: 'running', goal: researchGoal }));
-    const result = await researchApi.createRun(researchGoal, preferences, undefined, scope);
+    const result = await researchApi.createRun(researchGoal, preferences);
     if (!result.ok) {
       setApiError(result.error);
       updateById(active.id, thread => ({ ...thread, loading: false, status: 'failed' }));
@@ -182,11 +188,11 @@ export function ResearchDashboard() {
     setThreads(list => [next, ...list]); setActiveId(id); setGoal(''); setSidebarOpen(false);
   };
   const setTab = (tab: WorkspaceTab) => updateById(active.id, thread => ({ ...thread, tab }));
-  const revisePlan = async (nextGoal: string, excludedTools: string[], feedback?: string) => {
+  const revisePlan = async (nextGoal: string, excludedTools: string[], feedback?: string, fiscalYear?: number) => {
     if (!active.remoteRunId || !active.planVersion || !active.remoteUpdatedAt) return { message: '请刷新计划后再试。', error: true };
     updateById(active.id, thread => ({ ...thread, loading: true }));
     try {
-      const result = await researchApi.revisePlan(active.remoteRunId, active.planVersion, active.remoteUpdatedAt, nextGoal, excludedTools, feedback);
+      const result = await researchApi.revisePlan(active.remoteRunId, active.planVersion, active.remoteUpdatedAt, nextGoal, excludedTools, feedback, fiscalYear);
       if (!result.ok) return { message: result.error, error: true };
       if ('clarification' in result.data) return { message: result.data.clarification, error: false, planUnchanged: true };
       if (!await refreshRun(active.remoteRunId, active.id)) return { message: '新版已保存，请刷新查看。', error: false };
@@ -199,22 +205,46 @@ export function ResearchDashboard() {
   const apiEvidence = mode === 'api' ? active.apiEvidence?.find(item => item.id === evidenceId) : undefined;
   const selectedEvidence = mode === 'api' ? apiEvidence : evidence.find(item => item.id === evidenceId);
 
-  return <main className="app-shell">
+  const viewingReport = mode === 'api' && !documents.hasDocuments && active.tab === 'Research' && !!active.apiReport;
+  const canFollowup = mode === 'api' && !!active.apiReport && ['COMPLETE', 'PARTIAL', 'FAILED'].includes(active.apiStatus ?? '');
+  const tabLabels = { Research: '研究报告', Plan: '研究计划', Trace: '运行详情' };
+  const input = <ResearchInput thread={active} goal={goal} setGoal={setGoal} onStart={() => void start()}
+    documentMode={documents.hasDocuments}
+    busy={documents.busy}>{documents.controls}</ResearchInput>;
+
+  return <main className="app-shell answer-workspace">
     <div className={`sidebar-backdrop ${sidebarOpen ? 'show' : ''}`} onClick={() => setSidebarOpen(false)} />
     <div className={sidebarOpen ? 'sidebar-wrap open' : 'sidebar-wrap'}><Sidebar threads={threads} active={active.id} onSelect={selectThread} onNew={newThread} onPreferences={() => setPrefsOpen(true)} onClose={() => setSidebarOpen(false)} /></div>
     <section className="workspace">
       <ResearchHeader thread={active} onMenu={() => setSidebarOpen(true)} mode={mode} />
-      <div className="workspace-inner">
-        <ResearchInput thread={active} goal={goal} setGoal={setGoal} onStart={() => void start()} onAnnualStart={mode === "api" ? start : undefined} documentMode={documents.hasDocuments} busy={documents.busy}>{documents.controls}</ResearchInput>
-        <nav className="tabs" aria-label="工作区标签">{([['Research', BarChart3], ['Plan', ListChecks], ['Trace', ScrollText]] as const).filter(([tab])=>!documents.hasDocuments||tab==='Research').map(([tab, Icon]) => <button key={tab} data-testid={`tab-${tab.toLowerCase()}`} className={(documents.hasDocuments||active.tab === tab) ? 'active' : ''} onClick={() => setTab(tab)}><Icon />{documents.hasDocuments?'资料对话':tab}{tab === 'Plan' && active.status === 'approval' && <span className="tab-alert">1</span>}</button>)}</nav>
-        <div className="tab-content">
-          {(active.tab === 'Research'||documents.hasDocuments) && <>{documents.messages}{!documents.hasDocuments&&<><FinancialMetrics data={data} state={active.loading ? 'loading' : data ? 'ready' : 'empty'} /><FinancialCharts data={data} state={active.loading ? 'loading' : data ? 'ready' : 'empty'} /><ResearchReport thread={active} data={data} onEvidence={setEvidenceId} mode={mode} review={mode === "api" && <ResearchReview key={active.remoteRunId ?? active.id} thread={active} onRefresh={() => active.remoteRunId ? refreshRun(active.remoteRunId, active.id) : Promise.resolve()} />} /></>}</>}
+      <div className={canFollowup && viewingReport ? 'workspace-inner with-followup' : 'workspace-inner'}>
+        {!viewingReport && (!active.apiReport || documents.hasDocuments) && input}
+        <nav className="tabs" aria-label="工作区标签">{([['Research', BarChart3], ['Plan', ListChecks], ['Trace', ScrollText]] as const).filter(([tab])=>!documents.hasDocuments||tab==='Research').map(([tab, Icon]) => <button key={tab} data-testid={`tab-${tab.toLowerCase()}`} className={(documents.hasDocuments||active.tab === tab) ? 'active' : ''} onClick={() => setTab(tab)}><Icon />{documents.hasDocuments ? '资料对话' : tabLabels[tab]}{tab === 'Plan' && active.status === 'approval' && <span className="tab-alert">待确认</span>}</button>)}</nav>
+        {apiError && active.tab !== 'Trace' && <p role="alert" className="my-3 text-sm text-red-700">{apiError}</p>}
+        <div className="tab-content" id={viewingReport ? 'research-report-start' : undefined}>
+          {(active.tab === 'Research' || documents.hasDocuments) && <>
+            {documents.messages}
+            {!documents.hasDocuments && <>
+              <ResearchReport thread={active} data={data} onEvidence={setEvidenceId} mode={mode} review={mode === 'api' && active.plannerMode !== 'periodic_filing' &&
+                <ResearchReview key={active.remoteRunId ?? active.id} thread={active}
+                  onRefresh={() => active.remoteRunId ? refreshRun(active.remoteRunId, active.id) : Promise.resolve()} />} />
+              {data && <details className="card chart-disclosure">
+                <summary>查看行情与财务图表</summary>
+                <FinancialMetrics data={data} state="ready" />
+                <FinancialCharts data={data} state="ready" />
+              </details>}
+            </>}
+          </>}
           {!documents.hasDocuments&&active.tab === 'Plan' && <ResearchPlan thread={active} expanded={expanded} setExpanded={setExpanded} onAction={dispatch} onRevise={revisePlan} mode={mode} />}
-          {!documents.hasDocuments&&active.tab === 'Trace' && <ExecutionTrace thread={active} />}
+          {!documents.hasDocuments && active.tab === 'Trace' && <div className="run-details">
+            <ExecutionTrace thread={active} />
+            <AgentMonitor thread={active} mode={mode} apiError={apiError} onOpenPreferences={() => setPrefsOpen(true)} />
+          </div>}
         </div>
+        {canFollowup && !documents.hasDocuments && <ResearchFollowup key={active.remoteRunId ?? active.id}
+            visible={viewingReport} thread={active} />}
       </div>
     </section>
-    <AgentMonitor thread={active} mode={mode} apiError={apiError} onOpenPreferences={() => setPrefsOpen(true)} />
     <DetailDialog open={!!selectedEvidence} onOpenChange={open => !open && setEvidenceId(null)} title={`${selectedEvidence?.id ?? ''} · ${selectedEvidence?.title ?? ''}`} description={`${selectedEvidence?.type ?? ''} · ${selectedEvidence?.period ?? ''}`}>
       {selectedEvidence && <div className="dialog-copy">
         {apiEvidence ? <EvidenceTable item={apiEvidence} /> : <pre className="evidence-json">{selectedEvidence.detail}</pre>}

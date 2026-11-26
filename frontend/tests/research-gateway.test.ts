@@ -57,6 +57,63 @@ test('相同证据限制合并展示，并保留各自的证据入口', () => {
   assert.match(html, /查看证据 EVD-BBBB/);
 });
 
+test('报告首屏只对照可匹配财年的利润与经营现金流', () => {
+  const input = bundle();
+  input.evidence[1].data.symbol = '600036.SH';
+  input.evidence.push({
+    id: 'EVD-CASH', task_id: 'cash', tool_name: 'get_fuyao_cash_flow', title: '现金流量表',
+    is_demo: false, created_at: input.run.created_at, data: {
+      symbol: '600036.SH', records: [
+        { period: '2025-12-31', operating_cash_flow: 180_000_000_000 },
+        { period: '2026-09-30', operating_cash_flow: 250_000_000_000 },
+      ],
+    },
+  });
+  input.report = {
+    title: '研究报告', status: 'COMPLETE', data_notice: '', executive_summary: '', missing_information: [],
+    evidence_ids: ['ev2', 'EVD-CASH'], findings: [{
+      task: '经营现金流与归母净利润对照', statement: '经营现金流净额高于归母净利润。',
+      evidence_ids: ['ev2', 'EVD-CASH'],
+    }],
+  };
+  const thread = applyBundle(initialThreads[0], input);
+  const html = renderToStaticMarkup(createElement(ResearchReport, { thread, data: null, mode: 'api', onEvidence: () => {} }));
+  assert.match(html, /结论摘要/);
+  assert.match(html, /2025 财年/);
+  assert.match(html, /1,800/);
+  assert.doesNotMatch(html, /2026 财年|2,500/);
+});
+
+test('定期报告按实际期间显示，并将计算与原文页码一起呈现', () => {
+  const input = bundle();
+  const source = 'https://static.cninfo.com.cn/finalpage/2026-10-31/1225649896.PDF';
+  const evidenceId = 'EVD-PERIODIC';
+  input.evidence = [{ id: evidenceId, task_id: 'task', tool_name: 'read_official_periodic_report',
+    title: '读取官方定期报告', is_demo: false, created_at: input.run.created_at, data: {
+      dataset: 'periodic_filing', period: '2026 年三季报', fiscal_year: 2026, source,
+      reasons: [{ page: 3 }],
+    } }];
+  input.report = {
+    title: '定期报告', status: 'COMPLETE', data_notice: '', executive_summary: '', period: '2026 年三季报',
+    missing_information: [], evidence_ids: [evidenceId], findings: [
+      { task: '现金流对照', kind: 'computed', statement: '同比 +120.07%。', evidence_ids: [evidenceId] },
+      { task: '经营活动产生的现金流量净额变动原因', kind: 'disclosed', statement: '公司披露的原因。', evidence_ids: [evidenceId],
+        excerpt_refs: [{ evidence_id: evidenceId, collection: 'reasons', record_index: 0 }] },
+    ],
+    comparisons: [{ label: '经营现金流量净额', period: '2026 年 1–9 月', comparison_period: '2025 年 1–9 月',
+      current: 84058979832, previous: 38196802155, change: 120.07, change_basis: '同比', change_kind: 'computed',
+      basis: '合并现金流量表', page: 11, evidence_id: evidenceId, source }],
+  };
+  const thread = applyBundle(initialThreads[0], input);
+  assert.equal(thread.apiEvidence?.[0].period, '2026 年三季报');
+  assert.equal(thread.apiDataset, null);
+  const html = renderToStaticMarkup(createElement(ResearchReport, { thread, data: null, mode: 'api', onEvidence: () => {} }));
+  assert.match(html, /2026 年 1–9 月/);
+  assert.match(html, /系统计算/);
+  assert.match(html, /PDF#page=3/);
+  assert.match(html, /PDF#page=11/);
+});
+
 function bundle(isDemo = false): RunBundle {
   return {
     run: { id: 'run', thread_id: 'thread', goal: '分析招商银行的风险', status: 'COMPLETE', plan_version: 1, planner_mode: 'fixture', plan: null, approval: null, report: null, error: null, created_at: '2026-10-11T00:00:00Z', updated_at: '2026-10-11T00:00:00Z', started_at: null, completed_at: null, tasks: [{id: 'task', position: 1, title: '行情', tool_name: 'get_market_snapshot', arguments: {symbol: '600036.SH'}, rationale: '研究', status: 'COMPLETED', attempts: 1, evidence_id: 'ev1', error: null}], usage: {prompt_tokens: 0, completion_tokens: 0, total_tokens: 0, estimated_cost_usd: null, cost_status: 'NOT_CONFIGURED'} },

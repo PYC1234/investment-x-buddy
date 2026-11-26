@@ -11,6 +11,18 @@ def read_path(data, path):
     return current
 
 
+def describe_claim(claim, evidence):
+    item = evidence[claim['evidence_id']]
+    data = item['data']
+    return {
+        **claim, 'source': claim.get('source') or data.get('source') or data.get('data_label'),
+        'period': claim.get('period') or data.get('period') or data.get('fiscal_year'),
+        'raw_value': read_path(data, claim['field']),
+        'base_value': read_path(evidence[claim.get('base_evidence_id', claim['evidence_id'])]['data'],
+                                claim['base_field']) if claim.get('base_field') else None,
+    }
+
+
 def validate_claim(claim, evidence):
     try:
         item = evidence[claim['evidence_id']]
@@ -22,11 +34,17 @@ def validate_claim(claim, evidence):
             return False
         if not isinstance(expected, (int, float)) or isinstance(expected, bool) or not math.isfinite(expected):
             return False
-        if claim.get('formula') == 'growth_percent':
-            base = read_path(item['data'], claim['base_field'])
+        if claim.get('formula') in {'growth_percent', 'ratio_percent'}:
+            base_item = evidence[claim.get('base_evidence_id', claim['evidence_id'])]
+            if not base_item['data'].get('quality', {}).get('usable', True):
+                return False
+            base = read_path(base_item['data'], claim['base_field'])
             if not isinstance(base, (int, float)) or isinstance(base, bool) or not base or not math.isfinite(base):
                 return False
-            value = (value / base - 1) * 100
+            scale = claim.get('base_multiplier', 1)
+            if scale not in (1, 1e8):
+                return False
+            value = (value / (base * scale) - (1 if claim['formula'] == 'growth_percent' else 0)) * 100
         elif claim.get('formula') not in (None, 'identity'):
             return False
         return math.isclose(value, expected, rel_tol=1e-7, abs_tol=1e-7)
@@ -78,16 +96,25 @@ def attach_validation(report, evidence):
             issues.append('已拦截当前证据契约不支持的交易或目标价结论。')
             continue
         supplied_claims = finding.get('claims', [])
-        if any(not validate_claim(claim, by_id) or claim['evidence_id'] not in refs for claim in supplied_claims):
+        if any(not validate_claim(claim, by_id) or claim['evidence_id'] not in refs
+               or claim.get('base_evidence_id', claim['evidence_id']) not in refs for claim in supplied_claims):
             issues.append('已移除字段或计算无法复核的结论。')
             continue
-        finding['claims'] = supplied_claims or [c for c in claims if c['evidence_id'] in refs]
+        if 'kind' not in finding:
+            finding['kind'] = 'gap' if not refs else (
+                'interpretation' if any(by_id[ref]['is_demo'] for ref in refs) else 'observed')
+        if 'limitations' not in finding:
+            finding['limitations'] = list(dict.fromkeys(
+                issue['message'] for ref in refs for issue in by_id[ref]['data'].get('quality', {}).get('issues', [])
+            ))
+        # Only attach claims explicitly used by this finding.
+        finding['claims'] = [describe_claim(claim, by_id) for claim in supplied_claims]
         finding['validation_scope'] = 'FIELD_AND_ARITHMETIC_ONLY; prose not independently verified'
         accepted.append(finding)
     result['findings'] = accepted
-    result['claims'] = claims
+    result['claims'] = [*claims, *(claim for finding in accepted for claim in finding['claims'])]
     result['validation'] = {'status': 'FAIL' if issues else 'RULE_CHECKED', 'issues': issues,
-                            'checked_claims': len(claims), 'semantic_verification': 'NOT_PERFORMED',
+                            'checked_claims': len(result['claims']), 'semantic_verification': 'NOT_PERFORMED',
                             'policy': '引用存在性、可用字段与公式检查；不保证自然语言推断正确，不代表独立来源核验。'}
     result['missing_information'] = list(dict.fromkeys([*result['missing_information'], *issues]))
     return result

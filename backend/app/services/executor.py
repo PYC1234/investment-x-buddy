@@ -8,6 +8,7 @@ from app.core.errors import AppError
 from app.services.evidence_quality import assess_evidence
 from app.services.jobs import owns
 from app.services.official_filings import OFFICIAL_FILING_TOOL
+from app.services.periodic_filings import PERIODIC_TOOL
 from app.services.tools import ToolExecutionError
 
 
@@ -86,7 +87,12 @@ async def execute(service, run_id, retry_ids, token):
             try:
                 result, _ = await asyncio.wait_for(asyncio.to_thread(service.registry.execute, task['tool_name'], args), timeout=max(0.01, remaining()))
                 # Imported bundles have their own typed validation and provenance contract.
-                if result.get('is_demo') is False and task['tool_name'] != OFFICIAL_FILING_TOOL and result.get('data_label') not in {'IMPORTED PUBLIC SOURCES', 'USER UPLOADED REPORT'}:
+                if task['tool_name'] == PERIODIC_TOOL:
+                    if (result['symbol'] != args.symbol or (args.year and result['fiscal_year'] != args.year)
+                            or (args.kind != 'latest' and result['report_kind'] != args.kind)
+                            or result['coverage'] != args.coverage or result['is_demo']):
+                        raise ToolExecutionError('财报证据与已批准的标的或报告期不一致。', retryable=False)
+                elif result.get('is_demo') is False and task['tool_name'] != OFFICIAL_FILING_TOOL and result.get('data_label') not in {'IMPORTED PUBLIC SOURCES', 'USER UPLOADED REPORT'}:
                     result['quality'] = assess_evidence(task['tool_name'], result, task['arguments']['symbol'])
             except asyncio.TimeoutError:
                 error = 'Tool timed out; underlying read-only request may finish without being committed'
@@ -95,6 +101,8 @@ async def execute(service, run_id, retry_ids, token):
                 retryable = exc.retryable
             except (ValueError, TypeError, KeyError, OSError):
                 error = 'Tool response failed validation'
+            if error:
+                result = None
             duration = (time.perf_counter() - begin) * 1000
             with service.store.connection() as con:
                 con.execute('BEGIN IMMEDIATE')

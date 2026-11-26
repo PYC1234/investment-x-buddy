@@ -14,7 +14,7 @@ import time
 import json
 from app.api.routes.auth import principal, limit
 
-from app.schemas.research import ApprovalRequest, CreateRunRequest, RejectRequest, RetryFailedRequest, RevisePlanRequest, SupplementRequest
+from app.schemas.research import ApprovalRequest, CreateRunRequest, FollowupRequest, RejectRequest, RetryFailedRequest, RevisePlanRequest, SupplementRequest
 from app.services.runs import RunService, get_run_service
 
 
@@ -170,6 +170,8 @@ async def propose_supplement(run_id: str, body: SupplementRequest, service: RunS
 async def research_review(run_id: str, service: RunService = Depends(get_run_service)):
     from app.services.research_review import review_research
     run = service.get_run(run_id)
+    if run['planner_mode'] == 'periodic_filing' and run.get('report'):
+        return run['report']['research_review']
     return review_research(run['goal'], run['tasks'], service.get_evidence(run_id), service.registry,
         service.settings.research_data_dir, run['supplement_rounds'], service.settings.max_supplement_rounds)
 
@@ -177,6 +179,31 @@ async def research_review(run_id: str, service: RunService = Depends(get_run_ser
 @router.get("/runs/{run_id}/report")
 async def run_report(run_id: str, service: RunService = Depends(get_run_service)) -> dict[str, Any]:
     return service.get_report(run_id)
+
+
+@router.post("/runs/{run_id}/followup")
+async def followup(run_id: str, body: FollowupRequest, request: Request, service: RunService = Depends(get_run_service)):
+    from app.services.annual_update import AnnualScopeError
+    from app.services.research_followup import answer_followup
+
+    run = service.get_run(run_id)
+    if not run.get("report") or run["status"] not in {"COMPLETE", "PARTIAL", "FAILED"}:
+        raise HTTPException(409, "本轮研究完成后可以继续追问。")
+    question = body.question.strip()
+    if len(question) < 2:
+        raise HTTPException(422, "请输入完整的追问。")
+    try:
+        result = answer_followup(run, service.get_evidence(run_id), question, body.previous_question)
+    except AnnualScopeError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    if body.draft:
+        if not result["draft_goal"]:
+            raise HTTPException(409, "当前追问没有可生成的补查计划。")
+        user = request.state.user
+        limit(service.store, "research-create:" + user["id"], service.settings.max_run_requests_per_hour, seconds=3600)
+        result["plan"] = await service.create_run(CreateRunRequest(goal=result["draft_goal"], thread_id=run["thread_id"]),
+                                                  owner_id=user["id"])
+    return result
 
 
 @router.get("/runs/{run_id}/evidence")

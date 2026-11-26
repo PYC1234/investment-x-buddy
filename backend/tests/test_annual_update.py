@@ -130,6 +130,27 @@ async def test_ambiguous_or_unsupported_scope_requires_edit(annual_service, goal
     assert error.value.status_code == 422
     assert not requests
 
+@pytest.mark.anyio
+@pytest.mark.parametrize("question", ["2025 年营收为什么变化？", "2025 年营收比 2024 年变了多少？"])
+async def test_natural_annual_question_and_manual_year_revision(annual_service, question):
+    from app.schemas.research import RevisePlanRequest
+
+    service, requests = annual_service
+    run = await planned(service, f"贵州茅台（600519.SH）{question}")
+    assert run["planner_mode"] == "annual_update"
+    assert run["tasks"][0]["arguments"]["fiscal_year"] == 2025
+    assert run["tasks"][0]["arguments"]["require_fiscal_year"] is True
+    revised = await service.revise_plan(run["id"], RevisePlanRequest(
+        plan_version=run["plan_version"], expected_updated_at=run["updated_at"], goal=run["goal"], fiscal_year=2024,
+    ))
+    assert revised["id"] == run["id"] and revised["plan_version"] == 2
+    assert revised["status"] == "PENDING_APPROVAL" and not requests
+    assert revised["tasks"][0]["arguments"]["fiscal_year"] == 2024
+    assert "2024 年营收" in revised["goal"]
+    if "比" in question:
+        assert "比 2023 年" in revised["goal"]
+
+
 def text_pdf(text):
     from io import BytesIO
     from pypdf import PdfWriter

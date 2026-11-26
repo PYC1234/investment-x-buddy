@@ -106,6 +106,24 @@ class RunService:
         from app.schemas.research import PlannedTask
         from app.services.planner import PlanResult
         from app.services.official_filings import OFFICIAL_FILING_TOOL
+        from app.services.periodic_filings import PERIODIC_TOOL
+        from app.services.report_period import period_name, report_scope
+
+        period = report_scope(request.goal) if PERIODIC_TOOL in self.registry.names() else None
+        if request.annual_scope and period:
+            period = {"year": request.annual_scope.fiscal_year, "kind": "annual", "coverage": "reported"}
+        if period:
+            symbol = request.annual_scope.symbol if request.annual_scope else resolve_symbol(request.goal)
+            label = period_name(**period)
+            task = PlannedTask(title="读取官方定期报告", tool_name=PERIODIC_TOOL,
+                               arguments={"symbol": symbol, **period}, question=request.goal[:500],
+                               rationale="定位同一标的的完整披露文件，按合并报表字段和 PDF 页码提取。",
+                               completion_criteria=["核对证券代码与报告期", "标明比较期间、字段、单位和页码", "缺失字段或解释单列"])
+            self.registry.validate(task.tool_name, task.arguments)
+            plan = ResearchPlan(research_goal=request.goal, research_type="profitability", tasks=[task],
+                                scope=[label], limitations=["收入与现金流按披露期间读取。货币资金按时点比较。",
+                                                             "报表无法支持的分析将标在对应结论旁。"])
+            return PlanResult(plan, "periodic_filing")
 
         year = request.annual_scope.fiscal_year if request.annual_scope else annual_update_year(request.goal)
         if year is None:
@@ -163,6 +181,7 @@ class RunService:
 
     async def revise_plan(self, run_id: str, revision: RevisePlanRequest) -> dict[str, Any]:
         from app.services.annual_update import AnnualScopeError
+        from app.schemas.research import AnnualScope
         from app.services.planner import PlanResult
 
         run = self._run_or_404(run_id)
@@ -219,14 +238,29 @@ class RunService:
             except SymbolResolutionError as exc:
                 raise AppError(status_code=422, code="invalid_revised_scope", message=str(exc)) from exc
             excluded.update(removed)
-        if not interpretation and not excluded and goal == run["goal"]:
+        first_args = run["plan"]["tasks"][0]["arguments"]
+        previous_year = first_args.get("fiscal_year") if run["planner_mode"] == "annual_update" else (
+            first_args.get("year") if first_args.get("kind") == "annual" else None)
+        changed_year = revision.fiscal_year is not None and revision.fiscal_year != previous_year
+        if changed_year and run["planner_mode"] == "periodic_filing" and goal == run["goal"]:
+            from app.services.periodic_report import requested_keys, CASH, BALANCE
+            symbol = resolve_symbol(goal)
+            focus = "现金流" if set(requested_keys(goal)) & (CASH.keys() | BALANCE.keys()) else "营收和归母净利润"
+            if first_args.get("year") != revision.fiscal_year or first_args.get("kind") != "annual":
+                goal = f"{symbol} {revision.fiscal_year} 年完整财年{focus}"
+        if changed_year and previous_year is not None and goal == run["goal"]:
+            year_changes = {str(previous_year): str(revision.fiscal_year),
+                            str(previous_year - 1): str(revision.fiscal_year - 1)}
+            goal = re.sub(r"(?<!\d)20\d{2}(?=\s*年)", lambda match: year_changes.get(match[0], match[0]), goal)
+        if not interpretation and not excluded and goal == run["goal"] and not changed_year:
             raise AppError(status_code=422, code="plan_unchanged", message="请修改研究要求或取消不需要的工具。")
         try:
-            if goal == run["goal"]:
+            if goal == run["goal"] and not changed_year:
                 result = PlanResult(ResearchPlan.model_validate(run["plan"]), run["planner_mode"])
             else:
                 preferences = self.get_memory(run["thread_id"]).get("research_preferences", {})
-                result = await self._build_plan(CreateRunRequest(goal=goal), preferences, FixturePlanner() if interpretation else None)
+                scope = AnnualScope(symbol=resolve_symbol(goal), fiscal_year=revision.fiscal_year) if revision.fiscal_year is not None else None
+                result = await self._build_plan(CreateRunRequest(goal=goal, annual_scope=scope), preferences, FixturePlanner() if interpretation else None)
             if interpretation and interpretation.require_tools:
                 await self._append_requested_tools(result, goal, set(interpretation.require_tools), excluded)
             candidate_tools = {task.tool_name: task.title for task in result.plan.tasks}
@@ -262,7 +296,7 @@ class RunService:
             raise AppError(status_code=502, code="planner_failed", message="生成新版计划失败，原计划仍可使用。") from exc
 
         revised_tools = {task.tool_name: task.title for task in result.plan.tasks}
-        if interpretation and goal == run["goal"] and revised_tools.keys() == previous_tools.keys():
+        if interpretation and not changed_year and goal == run["goal"] and revised_tools.keys() == previous_tools.keys():
             absent = excluded - previous_tools.keys() - candidate_tools.keys()
             if absent:
                 if absent <= {"find_official_annual_report", "search_company_filings"}:
@@ -478,6 +512,8 @@ class RunService:
         from app.services.report_validation import attach_validation
         run = self.get_run(run_id)
         evidence = self.get_evidence(run_id)
+        if run['planner_mode'] == 'periodic_filing':
+            return self._finish_periodic_report(run, evidence, status, stop_reason)
         report = self._build_report(run_id, status, stop_reason)
         report['research_review'] = review_research(run['goal'], run['tasks'], evidence, self.registry,
             self.settings.research_data_dir, run['supplement_rounds'], self.settings.max_supplement_rounds,
@@ -511,11 +547,41 @@ class RunService:
         report['missing_information'].extend(report['research_review']['missing_evidence'])
         return attach_validation(report, evidence)
 
+    def _finish_periodic_report(self, run, evidence, status, stop_reason):
+        from app.services.periodic_filings import PERIODIC_TOOL
+        from app.services.periodic_report import build_periodic_findings
+        from app.services.report_period import period_name
+        from app.services.report_validation import attach_validation
+
+        scope = {key: run["tasks"][0]["arguments"][key] for key in ("year", "kind", "coverage")}
+        item = next((e for e in evidence if e["tool_name"] == PERIODIC_TOOL and not e["is_demo"]
+                     and e["data"].get("quality", {}).get("usable") is True), None)
+        findings, comparisons = build_periodic_findings(run["goal"], item, scope)
+        gaps = [f["statement"] for f in findings if f["kind"] == "gap"]
+        issues = [issue["message"] for e in evidence for issue in e["data"].get("quality", {}).get("issues", [])]
+        errors = [task["error"] for task in run["tasks"] if task.get("error")]
+        actual_period = item["data"]["period"] if item else None
+        coverage = "LIMITED" if not item or gaps or errors or stop_reason else "SCOPED_EVIDENCE_COLLECTED"
+        report = {"title": f"定期报告研究 · {run['goal']}", "status": status, "findings": findings,
+                  "period": actual_period, "requested_period": period_name(**scope), "comparisons": comparisons,
+                  "coverage_status": coverage, "quality_status": "WARN" if item else "NOT_CHECKED",
+                  "data_notice": "来源为巨潮资讯披露的公司定期报告；同比计算使用报表列示的对照值。",
+                  "executive_summary": f"取得 {len(comparisons)} 项可定位财报页码的指标。",
+                  "missing_information": list(dict.fromkeys([*gaps, *issues, *errors, *([stop_reason] if stop_reason else [])])),
+                  "evidence_ids": [e["id"] for e in evidence],
+                  "research_review": {"coverage_status": coverage, "missing_evidence": gaps,
+                                      "research_type": "profitability", "next_action": "REPORT",
+                                      "proposed_tasks": [], "supplement_rounds": 0, "max_supplement_rounds": 0,
+                                      "policy": "按本次指定指标及报告期核对覆盖。"}}
+        return attach_validation(report, evidence)
+
     def propose_supplement(self, run_id, expected_updated_at, plan_version, *, uploaded_task=None):
         run = self.get_run(run_id)
         if run['status'] not in {'COMPLETE', 'PARTIAL'} or run['updated_at'] != expected_updated_at or run['plan_version'] != plan_version:
             raise AppError(status_code=409, code='supplement_state_changed', message='研究状态已变化，请刷新后重试。')
         if len(self.get_tool_calls(run_id)) >= self.settings.max_tool_calls or run['execution_seconds'] >= self.settings.run_timeout_seconds:
+            return run
+        if run['planner_mode'] == 'periodic_filing':
             return run
         from app.services.research_review import review_research
         review = review_research(run['goal'], run['tasks'], self.get_evidence(run_id), self.registry,
@@ -555,6 +621,8 @@ class RunService:
         self.store.execute("UPDATE tasks SET status='FAILED',error=?,updated_at=? WHERE id=?", (error, now_iso(), task["id"]))
 
     def _build_report(self, run_id: str, status: str, stop_reason: str | None) -> dict[str, Any]:
+        from app.services.report_validation import read_path
+
         run = self._run_or_404(run_id)
         tasks = self.store.fetch_all("SELECT * FROM tasks WHERE run_id=? ORDER BY position", (run_id,))
         evidence = self.store.fetch_all("SELECT * FROM evidence WHERE run_id=? ORDER BY created_at", (run_id,))
@@ -574,6 +642,20 @@ class RunService:
                 return "未提供" if value is None else f"{value:,.2f}"
             for item in evidence:
                 data = item["data"]
+                claims = []
+
+                def cite(field, unit, period=None, **formula):
+                    try:
+                        value = read_path(data, field)
+                    except (KeyError, IndexError, TypeError):
+                        return
+                    if not isinstance(value, (int, float)) or isinstance(value, bool):
+                        return
+                    generic = re.sub(r"\.\d+\.", ".", field)
+                    provenance = data.get("field_provenance", {})
+                    basis = provenance.get(field, provenance.get(generic, {})).get("basis", "本次取数记录")
+                    claims.append({"evidence_id": item["id"], "field": field, "unit": unit, "value": value,
+                                   "period": period, "basis": basis, **formula})
                 quality = data.get("quality") or {}
                 for issue in quality.get("issues", []):
                     missing.append(f"[{item['id']}] {issue['message']}")
@@ -593,32 +675,47 @@ class RunService:
                     if data.get("data_label") == "FUYAO / MARKET DATA" and data["records"]:
                         latest = data["records"][-1]
                         if data["dataset"] == "cash_flows":
+                            cite(f"records.{count - 1}.operating_cash_flow", "元", latest["period"])
                             statement += f" {latest['period']} 年度经营活动现金流量净额 {number(latest['operating_cash_flow'] / 1e8)} 亿元。"
                         elif data["dataset"] == "balance_sheets":
+                            for key in ("total_assets", "total_liabilities"):
+                                cite(f"records.{count - 1}.{key}", "元", latest["period"])
                             statement += f" {latest['period']} 总资产 {number(latest['total_assets'] / 1e8)} 亿元，总负债 {number(latest['total_liabilities'] / 1e8)} 亿元。"
                 elif "snapshot" in data:
+                    cite("snapshot.price_cny", "元")
+                    cite("snapshot.change_percent", "%")
                     row = data["snapshot"]
                     statement = f"扶摇行情快照：价格 {number(row.get('price_cny'))} 元，涨跌幅 {number(row.get('change_percent'))}%。取得 {len(data.get('prices', []))} 条前复权日线。接口时间（北京时间）{datetime.fromtimestamp(data['timestamp_ms']/1000, timezone(timedelta(hours=8))).strftime('%Y-%m-%d %H:%M:%S') if isinstance(data.get('timestamp_ms'), (int, float)) else '未提供'}；接口时间不保证等于最新成交时间。"
                 elif "valuation" in data:
+                    cite("valuation.pe_ttm", "倍")
+                    cite("valuation.pb", "倍")
                     row = data["valuation"]
                     statement = f"估值：PE(TTM) {number(row.get('pe_ttm'))} 倍，PB(MRQ) {number(row.get('pb'))} 倍。倍数反映市场定价，缺少同业和历史区间，不能单凭倍数认定低估或高估。"
                 else:
                     rows = data.get("financial_history", [])
                     latest = rows[-1] if rows else {}
+                    if rows:
+                        for key in ("revenue", "profit"):
+                            cite(f"financial_history.{len(rows) - 1}.{key}", "亿元", latest["year"])
                     statement = f"盈利：{latest.get('year', '最近年度')} 年营业收入 {number(latest.get('revenue'))} 亿元，归母净利润 {number(latest.get('profit'))} 亿元。"
                     if annual_update and len(rows) < 2:
                         statement += ' 未取得可比较的上年完整数据，无法判断年度变化。'
                     if annual_update and len(rows) > 1:
                         previous = rows[-2]
+                        for key in ("revenue", "profit"):
+                            cite(f"financial_history.{len(rows) - 2}.{key}", "亿元", previous["year"])
                         statement += f" 上年营业收入 {number(previous.get('revenue'))} 亿元，归母净利润 {number(previous.get('profit'))} 亿元。"
-                    if len(rows) > 1 and rows[-2].get('revenue') and latest.get('revenue') is not None:
+                    if len(rows) > 1 and rows[-2].get('revenue', 0) > 0 and latest.get('revenue') is not None:
                         growth = (latest['revenue'] / rows[-2]['revenue'] - 1) * 100
+                        cite(f"financial_history.{len(rows) - 1}.revenue", "%", latest["year"],
+                             formula="growth_percent", base_field=f"financial_history.{len(rows) - 2}.revenue",
+                             comparison_period=rows[-2]["year"], value=growth)
                         statement += f"营业收入较上一可用年度变化 {growth:.2f}%；"
                         statement += "银行盈利需结合净息差、信用减值与非息收入验证，利润表总额不足以判断资产质量。" if is_bank else "需结合现金回款验证盈利质量。"
                 notices = [issue["message"] for issue in quality.get("issues", []) if issue["code"] in {"TIME_STALE", "HISTORY_STALE", "TIME_MISSING", "FINANCIAL_STALE", "PERIOD_GAP", "VALUATION_NONPOSITIVE"}]
                 if notices:
                     statement += " 质量提示：" + "；".join(notices)
-                findings.append({"task": item["title"], "statement": statement, "evidence_ids": [item["id"]]})
+                findings.append({"task": item["title"], "statement": statement, "evidence_ids": [item["id"]], "claims": claims})
                 if data.get("missing_information") and not (focus == "profitability" and item["tool_name"] == "get_financial_summary"):
                     missing.append(data["missing_information"])
             if not annual_update and (focus == "profitability" or any(
@@ -634,16 +731,26 @@ class RunService:
                     if profit is not None and revenue and revenue > 0:
                         findings.append({"task": "归母净利润占营收比例",
                                          "statement": f"{latest['year']} 年为 {profit / revenue:.2%}。",
-                                         "evidence_ids": [income["id"]]})
+                                         "kind": "computed", "evidence_ids": [income["id"]],
+                                         "claims": [{"evidence_id": income["id"], "field": f"financial_history.{len(rows)-1}.profit",
+                                                     "base_field": f"financial_history.{len(rows)-1}.revenue", "period": latest["year"],
+                                                     "basis": "归母净利润 ÷ 营业收入", "formula": "ratio_percent",
+                                                     "value": profit / revenue * 100, "unit": "%"}]})
                     cash = usable.get("get_fuyao_cash_flow")
                     if cash and profit and profit > 0:
-                        matching = next((row for row in cash["data"]["records"]
-                                         if row["period"] == f"{latest['year']}-12-31"), None)
-                        if matching:
+                        matched = next(((index, row) for index, row in enumerate(cash["data"]["records"])
+                                        if row["period"] == f"{latest['year']}-12-31"), None)
+                        if matched:
+                            index, matching = matched
                             ratio = matching["operating_cash_flow"] / (profit * 1e8)
                             findings.append({"task": "经营现金流与归母净利润对照",
                                              "statement": f"{latest['year']} 年经营活动现金流量净额相当于归母净利润的 {ratio:.2%}。两项口径不同，比例用于观察现金流与利润的关系。",
-                                             "evidence_ids": [cash["id"], income["id"]]})
+                                             "kind": "computed", "evidence_ids": [cash["id"], income["id"]],
+                                             "claims": [{"evidence_id": cash["id"], "field": f"records.{index}.operating_cash_flow",
+                                                         "base_evidence_id": income["id"], "base_field": f"financial_history.{len(rows)-1}.profit",
+                                                         "base_multiplier": 1e8, "period": latest["year"],
+                                                         "basis": "经营现金流净额（元）÷ 归母净利润（元）", "formula": "ratio_percent",
+                                                         "value": ratio * 100, "unit": "%"}]})
             if bank_risk:
                 findings.append({"task": "银行风险研究覆盖", "statement": "现有证据仅覆盖价格、年度营收与利润、估值倍数。尚未取得不良贷款率、关注及逾期贷款、拨备覆盖率、净息差、核心一级资本充足率和重点行业贷款敞口，无法判断资产质量、资本缓冲或流动性风险。以下为待核验方向，不代表这些风险已发生。", "evidence_ids": []})
             if is_bank:
@@ -831,6 +938,8 @@ def build_run_service(settings: Settings) -> RunService:
     from app.services.research_sources import register_source_tools
     register_source_tools(registry, settings.research_data_dir)
     from app.services.official_filings import register_official_filings
+    from app.services.periodic_filings import register_periodic_filings
+    register_periodic_filings(registry)
     if settings.finance_provider_configured:
         register_official_filings(registry)
     planner: Planner = FixturePlanner() if settings.planner_mode == "fixture" else DeepSeekPlanner(settings, registry)
