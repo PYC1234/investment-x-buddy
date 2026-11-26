@@ -136,6 +136,9 @@ def extract_periodic(pages, symbol, year, kind, coverage):
     records, reasons = {}, {}
     section, unit = None, None
     for page, raw in enumerate(pages, 1):
+        if raw is None:
+            section, unit = None, None
+            continue
         lines = raw.replace("\u00a0", " ")
         compact = _compact(lines)
         if kind == "annual" and (explanation := annual_cash_explanation(lines)):
@@ -187,6 +190,53 @@ def extract_periodic(pages, symbol, year, kind, coverage):
     return list(records.values()), list(reasons.values())
 
 
+def statement_pages(reader):
+    """Prioritize the financial statements in long PDFs while preserving page numbers."""
+    bookmarks = {}
+    try:
+        pending = list(reversed(reader.outline))
+        while pending:
+            entry = pending.pop()
+            if isinstance(entry, list):
+                pending.extend(reversed(entry))
+            else:
+                label = _compact(entry.title)
+                if label in SECTIONS and label not in bookmarks:
+                    page = reader.get_destination_page_number(entry)
+                    if page is not None and page >= 0:
+                        bookmarks[label] = page
+    except (PdfReadError, KeyError, ValueError, TypeError):
+        pass
+    for label in ("合并现金流量表", "合并利润表", "合并资产负债表"):
+        if label in bookmarks:
+            start = bookmarks[label]
+            yield from range(start, start + 4)
+
+
+def extract_pdf(reader, symbol, year, kind, coverage, deadline):
+    limit = min(len(reader.pages), 240)
+    pages = [None] * limit
+    preferred = list(range(min(14, limit)))
+    if kind in {"annual", "h1"}:
+        preferred.extend(statement_pages(reader))
+    checked = {index for index in preferred if index < limit}
+    for index in dict.fromkeys([*preferred, *range(limit)]):
+        if time.monotonic() > deadline:
+            break
+        if index >= limit:
+            continue
+        if index not in checked and checked and all(pages[number] is not None for number in checked):
+            records, reasons = extract_periodic(pages, symbol, year, kind, coverage)
+            core = {"money", "revenue", "profit", "sales_cash", "operating_cash"}
+            if coverage == "reported" and core <= {row["key"] for row in records}:
+                return records, reasons
+            checked.clear()
+        pages[index] = reader.pages[index].extract_text() or ""
+    if not pages or pages[0] is None:
+        raise ToolExecutionError("财报下载后已用完本次解析预算。")
+    return extract_periodic(pages, symbol, year, kind, coverage)
+
+
 def read_periodic_filing(args):
     deadline = time.monotonic() + 20
     try:
@@ -200,12 +250,7 @@ def read_periodic_filing(args):
                     if len(content) > MAX_PDF_BYTES or time.monotonic() > deadline:
                         raise ToolExecutionError("定期报告下载超出本次研究预算。", retryable=False)
         reader = PdfReader(io.BytesIO(content))
-        pages = []
-        for page in reader.pages[:240]:
-            if time.monotonic() > deadline:
-                break
-            pages.append(page.extract_text() or "")
-        records, reasons = extract_periodic(pages, args.symbol, year, kind, args.coverage)
+        records, reasons = extract_pdf(reader, args.symbol, year, kind, args.coverage, deadline)
     except (httpx.HTTPError, PdfReadError, ValueError, IndexError, OSError) as exc:
         raise ToolExecutionError(f"官方定期报告暂不可读（{type(exc).__name__}）。") from None
     issues = [{"code": "PDF_TEXT_SCOPE", "severity": "WARN", "message": "已核对 PDF 首页证券代码和报告期。只提取能识别的合并报表字段，表格与归因仍可逐页核对。"}]
@@ -215,9 +260,9 @@ def read_periodic_filing(args):
     return {"symbol": args.symbol, "fiscal_year": year, "report_kind": kind, "period": period_name(year, kind, args.coverage),
             "coverage": args.coverage, "title": title, "source": source, "published_at": published,
             "data_label": SOURCE_LABEL, "dataset": "periodic_filing", "currency": "CNY",
-            "is_demo": False, "available": bool(records), "records": records, "reasons": reasons,
+            "is_demo": False, "available": bool(records or reasons), "records": records, "reasons": reasons,
             "annual_cash_reason_checked": kind == "annual" and args.coverage == "reported",
-            "quality": {"status": "WARN", "usable": bool(records), "issues": issues}}
+            "quality": {"status": "WARN", "usable": bool(records or reasons), "issues": issues}}
 
 
 def register_periodic_filings(registry):

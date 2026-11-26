@@ -52,11 +52,21 @@ def build_periodic_findings(question, item, scope, *, keys=None):
     def gap(label, message):
         findings.append({"task": label, "statement": message, "kind": "gap", "evidence_ids": []})
 
+    def add_reason(key, label):
+        if key in reasons and (key in reason_keys or key == "operating_cash"):
+            reason_index, reason = reasons[key]
+            findings.append({"task": f"{label}变动原因", "statement": reason["text"], "kind": "disclosed",
+                             "evidence_ids": [item["id"]], "excerpt_refs": [
+                                 {"evidence_id": item["id"], "collection": "reasons", "record_index": reason_index}]})
+        elif key in reason_keys:
+            gap(f"{label}变动原因", f"未找到公司对{label}变化的直接解释。")
+
     comparisons = []
     for key in keys:
         label = (BALANCE | CASH | INCOME)[key]
         if key not in rows:
             gap(label, f"未取得与「{period}」口径一致的{label}。")
+            add_reason(key, label)
             continue
         index, row = rows[key]
         current = row["current"]
@@ -83,13 +93,7 @@ def build_periodic_findings(question, item, scope, *, keys=None):
         findings.append({"task": label, "statement": f"{row['period']}为 {current / 1e8:,.2f} 亿元"
                          + (f"，{basis}{growth:+.2f}%。" if growth is not None else "。"),
                          "kind": "disclosed", "evidence_ids": [item["id"]], "claims": claims})
-        if key in reasons and (key in reason_keys or key == "operating_cash"):
-            reason_index, reason = reasons[key]
-            findings.append({"task": f"{label}变动原因", "statement": reason["text"], "kind": "disclosed",
-                             "evidence_ids": [item["id"]], "excerpt_refs": [
-                                 {"evidence_id": item["id"], "collection": "reasons", "record_index": reason_index}]})
-        elif key in reason_keys:
-            gap(f"{label}变动原因", f"未找到公司对{label}变化的直接解释。")
+        add_reason(key, label)
     if {"sales_cash", "operating_cash"} <= set(keys) and {"sales_cash", "operating_cash"} <= rows.keys():
         cash_index, cash = rows["sales_cash"]
         operating_index, operating = rows["operating_cash"]

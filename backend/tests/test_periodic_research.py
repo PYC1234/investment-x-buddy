@@ -1,9 +1,37 @@
 import pytest
+from types import SimpleNamespace
 
 from app.services import periodic_filings
 from app.services.research_followup import answer_followup
 from app.services.report_period import report_scope
+from app.services.periodic_report import build_periodic_findings
 from test_run_flow import api_client, build_service
+
+
+def test_long_annual_pdf_prioritizes_cash_statement_and_keeps_available_reason(monkeypatch):
+    text_pages = [""] * 70
+    text_pages[0] = "证券代码：600519\n2025年年度报告"
+    text_pages[9] = "经营活动产生的现金流量净额变动原因说明：主要是同业存款增加。"
+    text_pages[63] = "合并现金流量表\n单位：元"
+    text_pages[64] = "经营活动产生的现金流量净额 61,522.20 92,463.69"
+    scanned = []
+
+    def extract(index):
+        scanned.append(index)
+        return text_pages[index]
+
+    reader = SimpleNamespace(
+        pages=[SimpleNamespace(extract_text=lambda index=index: extract(index)) for index in range(len(text_pages))],
+        outline=[[SimpleNamespace(title="合并现金流量表")]],
+        get_destination_page_number=lambda _: 63,
+    )
+    monkeypatch.setattr(periodic_filings.time, "monotonic", lambda: len(scanned))
+    records, reasons = periodic_filings.extract_pdf(reader, "600519.SH", 2025, "annual", "reported", 17)
+    assert records[0]["page"] == 65 and reasons[0]["page"] == 10
+    data = {"records": [], "reasons": reasons}
+    findings, _ = build_periodic_findings("为什么经营现金流变了？", {"id": "filing", "data": data},
+                                        {"year": 2025, "kind": "annual", "coverage": "reported"})
+    assert [finding["kind"] for finding in findings] == ["gap", "disclosed"]
 
 
 def test_annual_followup_answers_document_and_supported_explanation_independently():
