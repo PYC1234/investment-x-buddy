@@ -1,4 +1,4 @@
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -115,6 +115,8 @@ class FollowupRequest(BaseModel):
     model_config = {"extra": "forbid"}
     question: str = Field(min_length=2, max_length=450)
     previous_question: str = Field(default="", max_length=450)
+    history: list[Annotated[str, Field(min_length=2, max_length=450)]] = Field(default_factory=list, max_length=6)
+    context_run_ids: list[Annotated[str, Field(min_length=1, max_length=64)]] = Field(default_factory=list, max_length=6)
     draft: bool = False
 
 

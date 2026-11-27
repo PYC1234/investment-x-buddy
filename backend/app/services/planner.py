@@ -125,3 +125,13 @@ class FixturePlanner:
             task.completion_criteria = ['取得可用证据；不能提供的数据明确列为缺口']
         plan = ResearchPlan(research_goal=goal, research_type=focus, tasks=tasks, scope=[scope_names[t.tool_name] for t in tasks], limitations=limitations)
         return PlanResult(plan=plan, mode="fixture")
+
+
+async def build_market_supplement(goal: str) -> PlanResult:
+    result = await FixturePlanner().plan(goal, {})
+    tasks = [task for task in result.plan.tasks if task.tool_name in {"get_market_snapshot", "get_valuation_snapshot"}]
+    return PlanResult(mode="fixture", plan=result.plan.model_copy(update={
+        "tasks": tasks,
+        "scope": ["近期行情与历史日线", "PE(TTM) 与 PB(MRQ) 估值快照"],
+        "limitations": ["估值快照用于核对当前定价，历史估值和同业基准另需资料。"],
+    }))

@@ -184,7 +184,8 @@ async def run_report(run_id: str, service: RunService = Depends(get_run_service)
 @router.post("/runs/{run_id}/followup")
 async def followup(run_id: str, body: FollowupRequest, request: Request, service: RunService = Depends(get_run_service)):
     from app.services.annual_update import AnnualScopeError
-    from app.services.research_followup import answer_followup
+    from app.services.followup_selection import select_findings
+    from app.services.research_followup import answer_focus, answer_followup
 
     run = service.get_run(run_id)
     if not run.get("report") or run["status"] not in {"COMPLETE", "PARTIAL", "FAILED"}:
@@ -192,17 +193,57 @@ async def followup(run_id: str, body: FollowupRequest, request: Request, service
     question = body.question.strip()
     if len(question) < 2:
         raise HTTPException(422, "请输入完整的追问。")
+    user = request.state.user
+    evidence = service.get_evidence(run_id)
+    symbol = next((task["arguments"].get("symbol") for task in run["tasks"] if task["arguments"].get("symbol")), None)
+    focus = service.get_memory(run["thread_id"]).get("followup_focus", {})
+    if focus.get("symbol") != symbol:
+        focus = {}
+    earlier_runs, earlier_evidence = [], []
+    for context_id in dict.fromkeys([*reversed(body.context_run_ids), *focus.get("run_ids", [])]):
+        if context_id == run_id:
+            continue
+        match = service.store.fetch_one(
+            "SELECT id FROM runs WHERE id=? AND thread_id=? AND status IN ('COMPLETE','PARTIAL')",
+            (context_id, run["thread_id"]),
+        )
+        if match:
+            context_run = service.get_run(context_id)
+            if symbol and all(task["arguments"].get("symbol") == symbol for task in context_run["tasks"]):
+                earlier_runs.append(context_run)
+                earlier_evidence.extend(service.get_evidence(context_id))
+    history = [text.strip() for text in body.history if len(text.strip()) >= 2]
+    conversation_evidence = [*evidence, *earlier_evidence]
+    if not focus:
+        focus = answer_focus(run["report"].get("findings", []), evidence)
     try:
-        result = answer_followup(run, service.get_evidence(run_id), question, body.previous_question)
+        result = answer_followup(run, evidence, question, body.previous_question, history=history, earlier_evidence=earlier_evidence,
+                                 focus=None if body.draft else focus)
     except AnnualScopeError as exc:
         raise HTTPException(422, str(exc)) from exc
     if body.draft:
         if not result["draft_goal"]:
             raise HTTPException(409, "当前追问没有可生成的补查计划。")
-        user = request.state.user
         limit(service.store, "research-create:" + user["id"], service.settings.max_run_requests_per_hour, seconds=3600)
         result["plan"] = await service.create_run(CreateRunRequest(goal=result["draft_goal"], thread_id=run["thread_id"]),
-                                                  owner_id=user["id"])
+                                                  owner_id=user["id"], market_supplement=result.get("draft_kind") == "market")
+    elif service.settings.llm_configured and not result["draft_goal"] and not result["findings"] and not result.get("needs_disambiguation"):
+        try:
+            limit(service.store, "research-followup-model:" + user["id"], service.settings.max_run_requests_per_hour, seconds=3600)
+        except HTTPException as exc:
+            if exc.status_code != 429:
+                raise
+            return result
+        selected = await select_findings(question, history or [body.previous_question], [run, *earlier_runs],
+                                         conversation_evidence, service.settings, focus=focus)
+        if selected:
+            result.update(period=None, findings=selected, message="根据当前问题，从本对话已有证据中找到这些相关结论。")
+    if not body.draft:
+        updated = answer_focus(result["findings"], conversation_evidence)
+        if updated["topics"]:
+            ids = set(updated["evidence_ids"])
+            result_runs = list(dict.fromkeys(entry.get("run_id") or run_id for entry in conversation_evidence if entry["id"] in ids))
+            service.save_memory(run["thread_id"], "followup_focus", {**updated, "symbol": symbol, "run_ids": result_runs[:6]})
     return result
 
 

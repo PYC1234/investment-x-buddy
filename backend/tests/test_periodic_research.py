@@ -1,7 +1,11 @@
+import json
+
+import httpx
 import pytest
+from pydantic import SecretStr
 from types import SimpleNamespace
 
-from app.services import periodic_filings
+from app.services import followup_selection, periodic_filings
 from app.services.research_followup import answer_followup
 from app.services.report_period import report_scope
 from app.services.periodic_report import build_periodic_findings
@@ -54,6 +58,35 @@ def test_annual_followup_answers_document_and_supported_explanation_independentl
     assert document["source_links"][0]["url"] == source
     assert answer_followup(run, evidence, "下载年报 PDF")["findings"] == [document]
     assert answer_followup(run, evidence, "发给我2024年年报原文")["draft_goal"]
+    repeated = answer_followup(run, evidence, "那原因呢？", history=["营收怎么变了？", "依据呢？"])
+    assert repeated["findings"][0]["excerpt_refs"] == [{"evidence_id": "annual", "record_index": 0}]
+
+
+def test_investment_followup_uses_current_run_market_evidence():
+    run = {"tasks": [{"arguments": {"symbol": "300750.SZ"}}]}
+    market = {"id": "market", "tool_name": "get_market_snapshot", "is_demo": False,
+              "data": {"prices": [{"date": f"2026-01-{day:02}", "price": 99 + day} for day in range(1, 22)]}}
+    valuation = {"id": "valuation", "tool_name": "get_valuation_snapshot", "is_demo": False,
+                 "data": {"valuation": {"pe_ttm": 11.25, "pb": 2.5}}}
+    question = "根据分析最近能投宁德时代吗"
+    answer = answer_followup(run, [market, valuation], question)
+    trend, multiples, gap = answer["findings"]
+    assert answer["draft_goal"] is None and answer["period"] is None
+    assert trend["kind"] == "computed" and "+20.00%" in trend["statement"]
+    assert trend["claims"][0]["raw_value"] == 120 and trend["claims"][0]["base_value"] == 100
+    assert multiples["evidence_ids"] == ["valuation"] and "PE(TTM) 11.25" in multiples["statement"]
+    assert gap["kind"] == "gap" and "可比公司" in gap["statement"]
+    questions = [question, "那市盈率呢？", "依据是什么？", "和历史比呢？", "那市净率呢？"]
+    outcomes = [answer_followup(run, [], text, history=questions[:index], earlier_evidence=[market, valuation])
+                for index, text in enumerate(questions)]
+    assert outcomes[1]["findings"][0]["claims"][0]["field"] == "valuation.pe_ttm"
+    assert outcomes[2]["findings"] == outcomes[1]["findings"]
+    assert outcomes[3]["findings"][-1]["task"] == "历史估值区间"
+    assert outcomes[3]["findings"][-1]["kind"] == "gap"
+    assert outcomes[4]["findings"][0]["claims"][0]["field"] == "valuation.pb"
+    assert all(item["draft_goal"] is None for item in outcomes)
+    valuation["data"]["quality"] = {"usable": False}
+    assert all(finding["kind"] == "gap" for finding in answer_followup(run, [valuation], question)["findings"])
 
 
 def test_cash_flow_followup_checks_saved_passages_and_proposes_same_year_when_missing():
@@ -78,6 +111,61 @@ def test_cash_flow_followup_checks_saved_passages_and_proposes_same_year_when_mi
     pages = ["证券代码：600519\n2025年年度报告", cause]
     _, reasons = periodic_filings.extract_periodic(pages, "600519.SH", 2025, "annual", "reported")
     assert reasons[0]["key"] == "operating_cash" and reasons[0]["page"] == 2
+
+
+def test_pronoun_in_investment_question_reuses_annual_cash_flow_and_citation():
+    run = {"goal": "贵州茅台 2025 年经营现金流为什么下降？", "tasks": [{"arguments": {"symbol": "600519.SH"}}]}
+    filing = {"id": "annual", "tool_name": periodic_filings.PERIODIC_TOOL, "is_demo": False, "data": {
+        "fiscal_year": 2025, "report_kind": "annual", "coverage": "reported", "period": "2025 年年报",
+        "source": "https://static.cninfo.com.cn/finalpage/2026-04-17/1225114741.PDF",
+        "records": [{"key": "operating_cash", "current": 61522000000, "previous": 92464000000,
+                     "page": 65, "period": "2025 年 1–12 月", "comparison_period": "2024 年 1–12 月",
+                     "basis": "合并现金流量表", "unit": "元"}],
+        "reasons": [{"key": "operating_cash", "page": 10, "text": "成员单位存款减少及不可随时支取的同业存款增加。"}],
+    }}
+    for question in ["建议投他吗", "建议买入吗？", "值得投资吗？"]:
+        answer = answer_followup(run, [filing], question)
+        cash, explanation, interpretation, gap = answer["findings"]
+        assert "615.22" in cash["statement"] and cash["claims"][0]["page"] == 65
+        assert explanation["excerpt_refs"][0]["collection"] == "reasons"
+        assert "销售收现" in interpretation["statement"] and gap["kind"] == "gap"
+        assert "暂时无法判断" in answer["message"]
+        assert answer["draft_kind"] == "market" and "600519.SH" in answer["draft_goal"]
+    market = {"id": "market", "tool_name": "get_market_snapshot", "is_demo": False, "data": {}}
+    valuation = {"id": "valuation", "tool_name": "get_valuation_snapshot", "is_demo": False,
+                 "data": {"valuation": {"pe_ttm": 22, "pb": 6.8}}}
+    updated = answer_followup(run, [market, valuation], "那现在呢？", history=["建议投他吗"], earlier_evidence=[filing])
+    assert updated["draft_goal"] is None
+    assert updated["findings"][0]["evidence_ids"] == ["annual"]
+    assert any(finding["evidence_ids"] == ["valuation"] for finding in updated["findings"])
+    newer = {**filing, "id": "newer", "data": {**filing["data"], "fiscal_year": 2026, "period": "2026 年年报"}}
+    recalled = answer_followup(run, [newer], "刚才那个数字的依据是什么？", earlier_evidence=[filing],
+                               focus={"topics": ["financial:operating_cash"], "evidence_ids": ["annual"]})
+    assert recalled["period"] == "2025 年年报" and recalled["findings"][0]["evidence_ids"] == ["annual"]
+
+
+@pytest.mark.anyio
+async def test_model_can_only_select_a_verifiable_finding_from_the_same_conversation(monkeypatch):
+    snapshot = {"task": "估值快照", "statement": "PE(TTM) 为样本记录所列倍数。", "evidence_ids": ["real"]}
+    unsupported = {"task": "其它结论", "statement": "私有摘录", "evidence_ids": ["uploaded"]}
+    runs = [{"report": {"findings": [unsupported, snapshot]}}]
+    evidence = [{"id": "real", "tool_name": "get_valuation_snapshot", "is_demo": False, "data": {}},
+                {"id": "uploaded", "tool_name": "read_uploaded_annual_report", "is_demo": False, "data": {}}]
+    settings = SimpleNamespace(deepseek_base_url="https://model.invalid", deepseek_api_key=SecretStr("test-only"), deepseek_model="test")
+    sent = []
+    selected = [0]
+
+    def model(request):
+        sent.append(json.loads(json.loads(request.content)["messages"][1]["content"]))
+        return httpx.Response(200, json={"choices": [{"message": {"content": json.dumps({"ids": selected})}}]})
+
+    client_factory = httpx.AsyncClient
+    monkeypatch.setattr(followup_selection.httpx, "AsyncClient", lambda **_: client_factory(transport=httpx.MockTransport(model)))
+    answer = await followup_selection.select_findings("把有依据的那条讲出来", ["看估值"], runs, evidence, settings)
+    assert answer == [snapshot]
+    assert sent[0]["recent_questions"] == ["看估值"] and len(sent[0]["findings"]) == 1
+    selected[:] = [1]
+    assert not await followup_selection.select_findings("再看一条", [], runs, evidence, settings)
 
 
 def test_interim_extraction_keeps_periods_and_pages_separate():
@@ -149,6 +237,22 @@ async def test_followup_reuses_evidence_and_new_period_requires_approval(monkeyp
         answer = (await client.post(path + "/followup", json={"question": "经营现金流为什么增长？"})).json()
         assert any(finding.get("excerpt_refs", [{}])[0].get("collection") == "reasons" for finding in answer["findings"])
         assert len(calls) == 1 and answer["draft_goal"] is None
+        # Omit browser history to verify the backend can resume from the actual previous answer.
+        recalled = (await client.post(path + "/followup", json={"question": "刚才那个数据怎么算的？"})).json()
+        assert recalled["findings"][0]["claims"][0]["page"] == 11
+        assert "经营" in recalled["findings"][0]["task"]
+        assert any(claim.get("base_value") == 38196802155.27 for claim in recalled["findings"][0]["claims"])
+        causes = (await client.post(path + "/followup", json={"question": "为啥会变成这样？"})).json()
+        assert any(finding.get("excerpt_refs", [{}])[0].get("collection") == "reasons" for finding in causes["findings"])
+        await client.post(path + "/followup", json={"question": "销售收现是多少？"})
+        switched = (await client.post(path + "/followup", json={"question": "它的数据出处在哪？"})).json()
+        assert switched["findings"][0]["claims"][0]["page"] == 10
+        investment = (await client.post(path + "/followup", json={"question": "建议投他吗", "draft": True})).json()
+        assert investment["plan"]["status"] == "PENDING_APPROVAL" and len(calls) == 1
+        assert service.get_tool_calls(investment["plan"]["id"]) == []
+        assert investment["plan"]["thread_id"] == run["thread_id"]
+        assert {task["tool_name"] for task in investment["plan"]["tasks"]} == {"get_market_snapshot", "get_valuation_snapshot"}
+        assert all(task["arguments"]["symbol"] == "600519.SH" for task in investment["plan"]["tasks"])
         distinct = await client.post(path + "/followup", json={"question": "招商银行的经营现金流呢？"})
         assert distinct.status_code == 422
         question = {"question": "2025年三季报的经营现金流呢？"}

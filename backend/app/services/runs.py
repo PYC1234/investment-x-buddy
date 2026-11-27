@@ -41,7 +41,7 @@ class RunService:
             raise AppError(status_code=404, code="run_not_found", message="Run not found.")
         return run
 
-    async def create_run(self, request: CreateRunRequest, owner_id: str | None = None) -> dict[str, Any]:
+    async def create_run(self, request: CreateRunRequest, owner_id: str | None = None, *, market_supplement: bool = False) -> dict[str, Any]:
         timestamp = now_iso()
         thread_id = request.thread_id or str(uuid4())
         run_id = str(uuid4())
@@ -70,7 +70,13 @@ class RunService:
         from app.services.annual_update import AnnualScopeError
 
         try:
-            result = await self._build_plan(request, preferences)
+            if market_supplement:
+                from app.services.planner import build_market_supplement
+                result = await build_market_supplement(request.goal)
+                for task in result.plan.tasks:
+                    self.registry.validate(task.tool_name, task.arguments)
+            else:
+                result = await self._build_plan(request, preferences)
         except (SymbolResolutionError, AnnualScopeError) as exc:
             self.store.execute("UPDATE runs SET status='FAILED',error=?,updated_at=? WHERE id=?", (str(exc), now_iso(), run_id))
             self._event(run_id, "plan.invalid", {"error": str(exc)})
