@@ -4,6 +4,7 @@ import { BarChart3, ListChecks, ScrollText, Server } from 'lucide-react';
 import { Sidebar } from '@/components/sidebar';
 import { ResearchHeader } from '@/components/research-header';
 import { ResearchInput } from '@/components/research-input';
+import { ResearchWelcome } from '@/components/research-welcome';
 import { useDocumentConversation } from '@/components/document-conversation';
 import { FinancialCharts, FinancialMetrics } from '@/components/financial-charts';
 import { ResearchReport } from '@/components/research-report';
@@ -23,6 +24,13 @@ import type { Preferences, ResearchThread, RunAction, WorkspaceTab } from '@/typ
 
 const now = () => new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
 const pollable = new Set(['PLANNING', 'APPROVED', 'RUNNING']);
+
+function rememberActiveRun(id: string) {
+  window.localStorage.setItem('investment-x-buddy.active-run', id);
+  if (window.location.hash === '#upload-materials') {
+    window.history.replaceState(window.history.state, '', window.location.pathname + window.location.search);
+  }
+}
 
 export function ResearchDashboard() {
   const [threads, setThreads] = useState<ResearchThread[]>(() => configuredMode === 'api' ? [{ ...createThread('api-draft', '研究工作台', '', '新的研究线程'), updated: '尚未创建研究', apiTools: [] }] : initialThreads);
@@ -93,6 +101,11 @@ export function ResearchDashboard() {
 
   useEffect(() => {
     if (mode !== 'api' || restored.current) return;
+    if (window.location.hash === '#upload-materials') {
+      restored.current = true;
+      document.getElementById('upload-materials')?.focus();
+      return;
+    }
     const runId = window.localStorage.getItem('investment-x-buddy.active-run');
     if (!runId) return;
     const targetId = `api-${runId}`;
@@ -171,7 +184,7 @@ export function ResearchDashboard() {
       updateById(active.id, thread => ({ ...thread, loading: false, status: 'failed' }));
       return;
     }
-    window.localStorage.setItem('investment-x-buddy.active-run', result.data.id);
+    rememberActiveRun(result.data.id);
     const bundle = await refreshRun(result.data.id, active.id);
     updateById(active.id, thread => ({ ...thread, loading: false, tab: bundle ? 'Plan' : thread.tab }));
   };
@@ -180,7 +193,7 @@ export function ResearchDashboard() {
     const target = threads.find(thread => thread.id === id);
     if (!target) return;
     setActiveId(id); setGoal(target.goal); setSidebarOpen(false);
-    if (mode === 'api' && target.remoteRunId) window.localStorage.setItem('investment-x-buddy.active-run', target.remoteRunId);
+    if (mode === 'api' && target.remoteRunId) rememberActiveRun(target.remoteRunId);
   };
   const newThread = () => {
     const id = `local-${Date.now()}`;
@@ -207,6 +220,7 @@ export function ResearchDashboard() {
 
   const viewingReport = mode === 'api' && !documents.hasDocuments && active.tab === 'Research' && !!active.apiReport;
   const canFollowup = mode === 'api' && !!active.apiReport && ['COMPLETE', 'PARTIAL', 'FAILED'].includes(active.apiStatus ?? '');
+  const isStart = mode === 'api' && !active.remoteRunId && active.status === 'idle' && !documents.hasDocuments;
   const tabLabels = { Research: '研究报告', Plan: '研究计划', Trace: '运行详情' };
   const input = <ResearchInput thread={active} goal={goal} setGoal={setGoal} onStart={() => void start()}
     documentMode={documents.hasDocuments}
@@ -216,15 +230,18 @@ export function ResearchDashboard() {
     <div className={`sidebar-backdrop ${sidebarOpen ? 'show' : ''}`} onClick={() => setSidebarOpen(false)} />
     <div className={sidebarOpen ? 'sidebar-wrap open' : 'sidebar-wrap'}><Sidebar threads={threads} active={active.id} onSelect={selectThread} onNew={newThread} onPreferences={() => setPrefsOpen(true)} onClose={() => setSidebarOpen(false)} /></div>
     <section className="workspace">
-      <ResearchHeader thread={active} onMenu={() => setSidebarOpen(true)} mode={mode} />
+      {!isStart && <ResearchHeader thread={active} onMenu={() => setSidebarOpen(true)} mode={mode} />}
       <div className={canFollowup && viewingReport ? 'workspace-inner with-followup' : 'workspace-inner'}>
+        {isStart && <ResearchWelcome onStart={() => document.getElementById('research-question')?.focus()}
+          onUpload={documents.openPicker}
+          onMenu={() => setSidebarOpen(true)} />}
         {!viewingReport && (!active.apiReport || documents.hasDocuments) && input}
-        <nav className="tabs" aria-label="工作区标签">{([['Research', BarChart3], ['Plan', ListChecks], ['Trace', ScrollText]] as const).filter(([tab])=>!documents.hasDocuments||tab==='Research').map(([tab, Icon]) => <button key={tab} data-testid={`tab-${tab.toLowerCase()}`} className={(documents.hasDocuments||active.tab === tab) ? 'active' : ''} onClick={() => setTab(tab)}><Icon />{documents.hasDocuments ? '资料对话' : tabLabels[tab]}{tab === 'Plan' && active.status === 'approval' && <span className="tab-alert">待确认</span>}</button>)}</nav>
+        {!isStart && <nav className="tabs" aria-label="工作区标签">{([['Research', BarChart3], ['Plan', ListChecks], ['Trace', ScrollText]] as const).filter(([tab])=>!documents.hasDocuments||tab==='Research').map(([tab, Icon]) => <button key={tab} data-testid={`tab-${tab.toLowerCase()}`} className={(documents.hasDocuments||active.tab === tab) ? 'active' : ''} onClick={() => setTab(tab)}><Icon />{documents.hasDocuments ? '资料对话' : tabLabels[tab]}{tab === 'Plan' && active.status === 'approval' && <span className="tab-alert">待确认</span>}</button>)}</nav>}
         {apiError && active.tab !== 'Trace' && <p role="alert" className="my-3 text-sm text-red-700">{apiError}</p>}
         <div className="tab-content" id={viewingReport ? 'research-report-start' : undefined}>
           {(active.tab === 'Research' || documents.hasDocuments) && <>
             {documents.messages}
-            {!documents.hasDocuments && <>
+            {!documents.hasDocuments && !isStart && <>
               <ResearchReport thread={active} data={data} onEvidence={setEvidenceId} mode={mode} review={mode === 'api' && active.plannerMode !== 'periodic_filing' &&
                 <ResearchReview key={active.remoteRunId ?? active.id} thread={active}
                   onRefresh={() => active.remoteRunId ? refreshRun(active.remoteRunId, active.id) : Promise.resolve()} />} />

@@ -128,6 +128,17 @@ function PageLink({ source, page }: { source: unknown; page: number }) {
   return <a className="citation" href={link.href} target="_blank" rel="noreferrer">PDF 第 {page} 页</a>;
 }
 
+function HighlightedExcerpt({ text, quote }: { text: string; quote: string }) {
+  const compactQuote = quote.replace(/\s+/g, '');
+  if (!compactQuote) return text;
+  const characters = [...text.matchAll(/\S/g)];
+  const start = characters.map(character => character[0]).join('').indexOf(compactQuote);
+  if (start < 0) return text;
+  const first = characters[start].index;
+  const last = characters[start + compactQuote.length - 1].index + 1;
+  return <>{text.slice(0, first)}<mark className="rounded bg-amber-100 text-slate-900">{text.slice(first, last)}</mark>{text.slice(last)}</>;
+}
+
 function PeriodComparison({ rows }: { rows: FilingComparison[] }) {
   return <section className="answer-metrics" aria-label="财报指标对照">
     <h4>财报指标对照</h4>
@@ -162,13 +173,15 @@ export function FindingContent({ finding, evidence }: {
     if (!item || !row) return [];
     const source = row.source ?? item.data.source;
     if (sourceUrl(source)) pages.set(`${item.id}-${row.page}`, { source: sourceUrl(source), page: row.page });
-    return [{ ...row, id: `${item.id}-${ref.record_index}` }];
+    return [{ ...row, source, id: `${item.id}-${ref.collection ?? 'records'}-${ref.record_index}` }];
   });
   return <>
     <p className="mt-1">{finding.kind && <strong className={finding.kind === 'gap' ? 'mr-2 text-sm text-amber-900' : 'mr-2 text-sm text-slate-600'}>{kindLabel[finding.kind]}</strong>}{finding.statement}</p>
     <div className="flex flex-wrap items-center gap-1">
       {(sources.length > 0 || Boolean(finding.claims?.length || finding.limitations?.length)) &&
-        <button type="button" className="citation" onClick={() => setOpen(true)} aria-label={`查看依据 · ${finding.task}`}>查看依据</button>}
+        <button type="button" className="citation" onClick={() => setOpen(true)} aria-label={`${excerpts.length ? '查看原文摘录' : '查看依据'} · ${finding.task}`}>
+          {excerpts.length ? '查看原文摘录' : '查看依据'}
+        </button>}
       {finding.evidenceIds.length > sources.length && <span className="text-sm text-amber-800">部分引用暂不可读取</span>}
       {[...pages].map(([key, value]) => <PageLink key={key} {...value} />)}
       {finding.source_links?.map(link => {
@@ -178,6 +191,10 @@ export function FindingContent({ finding, evidence }: {
     </div>
     <DetailDialog open={open} onOpenChange={setOpen} title="结论依据" description={finding.task}>
     <div className="space-y-4 text-sm">
+    {excerpts.map(row => <blockquote key={row.id} className="rounded border-l-2 border-blue-500 bg-slate-50 p-3">
+      <PageLink source={row.source} page={row.page} />
+      <p className="whitespace-pre-wrap break-words"><HighlightedExcerpt text={row.text ?? ''} quote={finding.kind === 'disclosed' ? finding.statement : ''} /></p>
+    </blockquote>)}
     {Boolean(finding.claims?.length) && <section>
       <h3 className="font-semibold">字段与计算</h3>
       <ul className="space-y-2 py-2">{finding.claims?.map((claim, index) => <li key={index}>
@@ -188,9 +205,6 @@ export function FindingContent({ finding, evidence }: {
         <code className="break-all text-xs text-slate-600">{[claim.field, claim.base_field].filter(Boolean).join(' / ')}</code>
       </li>)}</ul>
     </section>}
-    {excerpts.map(row => <blockquote key={row.id} className="rounded bg-slate-50 p-3">
-      <strong>财报第 {row.page} 页</strong><p className="whitespace-pre-wrap">{row.text}</p>
-    </blockquote>)}
     {sources.map(item => <details className="border-t pt-2" key={item.id}>
       <summary className="cursor-pointer font-medium">{item.title}</summary>
       <div className="mt-2"><EvidenceTable item={item} /></div>

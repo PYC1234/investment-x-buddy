@@ -127,6 +127,32 @@
 .answer-workspace .status-badge { white-space: nowrap; font-size: 11px; }
 .demo-evidence-label { display: inline-flex; align-items: center; gap: 5px; color: #956323; font-size: 11px; margin-top: 6px; }
 .answer-workspace .workspace-inner { padding-top: 8px; }
+.research-welcome {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+  gap: clamp(16px, 3vw, 30px);
+  align-items: center;
+  padding: clamp(32px, 6vw, 58px) 0 24px;
+}
+.research-welcome h1 { color: var(--ink); font-size: clamp(24px, 3.6vw, 36px); font-weight: 700; line-height: 1.25; }
+.research-welcome p { margin: 10px 0; color: var(--muted); font-size: 14px; line-height: 1.65; }
+.research-welcome > div:first-child > p { margin-bottom: 18px; }
+.welcome-example {
+  padding: 16px;
+  border: 1px solid #dfe7f1;
+  border-radius: 12px;
+  background: #f0f5fb;
+}
+.welcome-example h2 { color: var(--navy); font-size: 13px; font-weight: 650; }
+.welcome-example strong { color: var(--ink); }
+.welcome-example a { display: inline-flex; align-items: center; gap: 3px; color: var(--navy); text-decoration: underline; }
+.answer-workspace .example-goals { flex-wrap: wrap; }
+.answer-workspace .example-goals button { font-size: 12px; text-align: left; line-height: 1.5; }
+#upload-materials { scroll-margin-top: 18px; }
+@media (max-width: 650px) {
+  .research-welcome { grid-template-columns: 1fr; padding-top: 22px; }
+  .answer-workspace .input-actions { flex-wrap: wrap; }
+}
 .answer-workspace .tabs { margin-top: 10px; gap: clamp(14px, 3vw, 28px); }
 .answer-workspace .tabs button { padding: 12px 2px; white-space: nowrap; min-height: 44px; }
 .answer-workspace .tab-content { padding-top: 12px; }

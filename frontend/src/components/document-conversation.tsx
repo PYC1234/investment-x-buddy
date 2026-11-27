@@ -1,10 +1,12 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
+import { DetailDialog } from '@/components/ui/dialog';
 import { privateFetch, storedIdentity } from '@/lib/identity';
 type Source={id:string;filename:string;location:string;text:string};
 type Reply={question:string;answer:string;sources:Source[];model_status:string;warnings:string[];history_id?:string};
-type Conversation={files:File[];turns:Reply[];historyStart:number;busy:boolean;error:string;useModel:boolean;saveHistory:boolean};
+type DocumentTurn = Reply & { files: File[] };
+type Conversation={files:File[];turns:DocumentTurn[];historyStart:number;busy:boolean;error:string;useModel:boolean;saveHistory:boolean};
 const empty=():Conversation=>({files:[],turns:[],historyStart:0,busy:false,error:'',useModel:false,saveHistory:false});
 const sample='产品名称,产品代码,一年收益率,管理费率,风险等级\n示例产品A,000001,3.2%,0.5%,R2\n示例产品B,000002,5.1%,0.8%,R3\n示例产品C,000003,,0.3%,R2\n';
 const labels:Record<string,string>={not_requested:'规则提取 · 未调用模型',generated_needs_review:'AI回答 · 请对照来源复核',not_configured:'模型未配置 · 显示规则结果',failed:'AI回答失败 · 显示规则结果'};
@@ -13,9 +15,49 @@ function exportReply(reply:Reply){
   const url=URL.createObjectURL(new Blob([text],{type:'text/markdown;charset=utf-8'}));
   const a=document.createElement('a');a.href=url;a.download='资料对话-分析.md';a.click();setTimeout(()=>URL.revokeObjectURL(url),10000);
 }
+
+function DocumentAnswer({ turn }: { turn: DocumentTurn }) {
+  const [selected, setSelected] = useState<Source | null>(null);
+  const sourcesById = new Map(turn.sources.map(source => [`[${source.id}]`, source]));
+  const pdfRef = selected?.id.match(/^D(\d+):P(\d+)-\d+$/);
+  const file = pdfRef && turn.files[Number(pdfRef[1]) - 1];
+  const page = pdfRef?.[2];
+
+  function openPdf(file: File, page: string) {
+    const url = URL.createObjectURL(file.slice(0, file.size, 'application/pdf'));
+    window.open(`${url}#page=${page}`, '_blank', 'noopener,noreferrer');
+    window.setTimeout(() => URL.revokeObjectURL(url), 60000);
+  }
+
+  return <>
+    <div className="whitespace-pre-wrap break-words leading-relaxed">
+      {turn.answer.split(/(\[D\d+:[^\]\r\n]+\])/).map((part, index) => {
+        const source = sourcesById.get(part);
+        return source ? <button key={index} type="button" className="citation" onClick={() => setSelected(source)}
+          title={`${source.filename} · ${source.location}`} aria-label={`查看原文 · ${source.filename} · ${source.location} · ${source.id}`}>
+          {source.location}
+        </button> : part;
+      })}
+    </div>
+    {turn.warnings.map((warning,i)=><p key={i} role="status" style={{color:'#92400e',marginTop:8}}>{warning}</p>)}
+    {turn.sources.length > 0 && <details className="answer-disclosure mt-4">
+      <summary>本轮来源（{turn.sources.length}）</summary>
+      <ul className="mt-2 space-y-1">{turn.sources.map(source => <li key={source.id}>
+        <button type="button" className="citation" onClick={() => setSelected(source)}>{source.filename} · {source.location} [{source.id}]</button>
+      </li>)}</ul>
+    </details>}
+    <DetailDialog open={Boolean(selected)} onOpenChange={open => { if (!open) setSelected(null); }}
+      title="原文摘录" description={selected ? `${selected.filename} · ${selected.location}` : ''}>
+      {selected && <blockquote className="whitespace-pre-wrap break-words rounded border-l-2 border-blue-500 bg-slate-50 p-3 text-sm">{selected.text}</blockquote>}
+      {file && page && <button type="button" className="citation mt-3" onClick={() => openPdf(file, page)}>打开原 PDF 第 {page} 页</button>}
+    </DetailDialog>
+  </>;
+}
+
 export function useDocumentConversation(threadId:string){
   const [conversations,setConversations]=useState<Record<string,Conversation>>({});
   const [signedIn,setSignedIn]=useState(false);
+  const fileInput = useRef<HTMLInputElement>(null);
   const controllers=useRef(new Map<string,AbortController>());
   const current=conversations[threadId]??empty();
   const update=(id:string,fn:(value:Conversation)=>Conversation)=>setConversations(all=>({...all,[id]:fn(all[id]??empty())}));
@@ -45,14 +87,14 @@ export function useDocumentConversation(threadId:string){
       const history=snapshot.turns.slice(snapshot.historyStart).slice(-3).flatMap(t=>[{role:'user',content:t.question},{role:'assistant',content:t.answer.slice(0,6000)}]);
       const response=await privateFetch('/api/v1/documents/chat',{method:'POST',signal:controller.signal,body:JSON.stringify({question,documents,history,use_model:snapshot.useModel,save_history:snapshot.saveHistory})});
       const result=await response.json();if(!response.ok)throw new Error(result.error?.message||'资料问答失败，请重试。');
-      update(id,c=>({...c,turns:[...c.turns,result]}));
+      update(id,c=>({...c,turns:[...c.turns,{...result,files:snapshot.files}]}));
     }catch(error){update(id,c=>({...c,error:error instanceof Error&&error.name==='AbortError'?'已取消或超时，资料和已有回答仍在，可重新发送。':error instanceof Error?error.message:'连接失败，请重试。'}));}
     finally{clearTimeout(timer);controllers.current.delete(id);update(id,c=>({...c,busy:false}));}
   }
-  const controls=<div style={{borderTop:'1px solid #e2e8f0',paddingTop:12,fontSize:12,color:'#475569'}}>
+  const controls=<div id="upload-materials" tabIndex={-1} aria-label="上传研究资料" style={{borderTop:'1px solid #e2e8f0',paddingTop:12,fontSize:12,color:'#475569'}}>
     <div style={{display:'flex',flexWrap:'wrap',gap:12,alignItems:'center'}}>
-      <label style={{cursor:'pointer',color:'#1d4ed8',fontWeight:600}}>＋ 添加资料（PDF / CSV）<input aria-label="添加对话资料" type="file" accept=".pdf,.csv" multiple disabled={current.busy} style={{display:'none'}} onChange={e=>{attach(Array.from(e.target.files??[]));e.target.value='';}}/></label>
-      <button type="button" disabled={current.busy||current.files.length>=3} onClick={()=>attach([new File([sample],'示例产品数据.csv',{type:'text/csv'})])}>试用示例资料</button><span>无需登录 · 不附资料时使用联网研究</span>
+      <label style={{cursor:'pointer',color:'#1d4ed8',fontWeight:600}}>＋ 添加资料（PDF / CSV）<input ref={fileInput} aria-label="添加对话资料" type="file" accept=".pdf,.csv" multiple disabled={current.busy} style={{display:'none'}} onChange={e=>{attach(Array.from(e.target.files??[]));e.target.value='';}}/></label>
+      <button type="button" disabled={current.busy||current.files.length>=3} onClick={()=>attach([new File([sample],'示例产品数据.csv',{type:'text/csv'})])}>试用示例资料</button><span>无需登录</span>
     </div>
     {current.files.length>0&&<><ul style={{margin:'10px 0'}}>{current.files.map((file,index)=><li key={index} style={{display:'flex',gap:12,margin:'5px 0'}}><span>📎 {file.name} · {(file.size/1024).toFixed(1)} KB</span><button aria-label={`移除${file.name}`} disabled={current.busy} onClick={()=>update(threadId,c=>({...c,files:c.files.filter((_,i)=>i!==index),historyStart:c.turns.length}))}>移除</button></li>)}</ul>
       <p>本次问题仅分析以上附件，可继续追问。原文件不落盘，资料与对话在当前页面暂存，刷新后清空。</p>
@@ -66,11 +108,10 @@ export function useDocumentConversation(threadId:string){
     {!current.turns.length&&current.files.length>0&&<div className="input-card"><h3>资料已加入当前对话</h3><p>在上方输入问题，例如“比较这些产品的管理费率，并说明数据缺失情况”，然后发送。启用 AI 问答后可继续追问。</p></div>}
     {current.turns.map((turn,index)=><article className="input-card" key={index}>
       <h3 style={{fontWeight:600,marginBottom:12}}>你：{turn.question}</h3><p style={{fontSize:12,color:'#64748b',marginBottom:10}}>{labels[turn.model_status]} · {turn.history_id?'已保存到我的历史':'未保存个人历史'}</p>
-      <div style={{whiteSpace:'pre-wrap',lineHeight:1.8,overflowWrap:'anywhere'}}>{turn.answer}</div>
-      {turn.warnings.map((warning,i)=><p key={i} role="status" style={{color:'#92400e',marginTop:8}}>{warning}</p>)}
-      <details style={{marginTop:16}}><summary style={{cursor:'pointer',fontWeight:600}}>查看本轮原文来源（{turn.sources.length}）</summary>{turn.sources.map(source=><details key={source.id} style={{marginTop:10}}><summary style={{cursor:'pointer'}}>[{source.id}] {source.filename} · {source.location}</summary><pre style={{whiteSpace:'pre-wrap',overflowWrap:'anywhere',fontFamily:'inherit',fontSize:12,marginTop:8}}>{source.text}</pre></details>)}</details>
+      <DocumentAnswer turn={turn} />
       <button style={{marginTop:16,color:'#1d4ed8'}} onClick={()=>exportReply(turn)}>导出本轮回答与来源</button>
     </article>)}
   </section>;
-  return {hasDocuments:current.files.length>0,hasMessages:current.turns.length>0,busy:current.busy,send,controls,messages};
+  return {hasDocuments:current.files.length>0,hasMessages:current.turns.length>0,busy:current.busy,send,controls,messages,
+    openPicker: () => fileInput.current?.click()};
 }
