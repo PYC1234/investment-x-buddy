@@ -11,7 +11,7 @@ export interface FilingRef { evidence_id: string; record_index: number; collecti
 export interface FindingDetails { kind?: 'disclosed' | 'computed' | 'observed' | 'gap' | 'interpretation'; claims?: FindingClaim[]; limitations?: string[]; excerpt_refs?: FilingRef[]; source_links?: Array<{ label: string; url: string }> }
 export interface ResearchFinding extends FindingDetails { task: string; statement: string; evidenceIds: string[] }
 export interface FilingComparison { label: string; period: string; comparison_period: string; current: number; previous: number | null; change: number | null; change_basis: string; change_kind: 'disclosed' | 'computed'; basis: string; evidence_id: string; page: number; source: string }
-export interface FollowupAnswer { period: string | null; message: string; findings: ResearchFinding[]; draft_goal: string | null }
+export interface FollowupAnswer { period: string | null; message: string; findings: ResearchFinding[]; draft_goal: string | null; draft_kind?: 'market' }
 export interface ResearchReviewData { coverage_status: string; missing_evidence: string[]; next_action: string; supplement_rounds: number; max_supplement_rounds: number; policy: string }
 export interface ReportValidation { status: string; checked_claims: number; semantic_verification: string; policy: string; issues: string[] }
 export interface AnnualScope { symbol: string; fiscal_year: number }

@@ -152,10 +152,11 @@ export function applyBundle(thread: ResearchThread, bundle: RunBundle): Research
 export const researchApi = {
   tools: (signal?: AbortSignal) => request<ApiTool[]>('/api/v1/tools', { signal }),
   createRun: (goal: string, preferences: Preferences, signal?: AbortSignal, annualScope?: AnnualScope) => request<ApiRun>('/api/v1/runs', { method: 'POST', body: JSON.stringify({ goal, preferences, annual_scope: annualScope }), signal }),
-  followup: async (id: string, question: string, previousQuestion: string, draft: boolean) => {
+  followup: async (id: string, question: string, history: string[], contextRunIds: string[], draft: boolean) => {
     const signal = draft ? undefined : AbortSignal.timeout(15000);
     const result = await request<ApiFollowup>(`/api/v1/runs/${encodeURIComponent(id)}/followup`, {
-      method: 'POST', body: JSON.stringify({ question, previous_question: previousQuestion, draft }),
+      method: 'POST', body: JSON.stringify({ question, previous_question: history.at(-1) ?? '',
+        history, context_run_ids: contextRunIds, draft }),
       signal,
     });
     if (signal?.aborted) return { ok: false as const, error: '追问响应超时，已保留问题，可重新发送。' };

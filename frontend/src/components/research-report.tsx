@@ -37,15 +37,23 @@ export function ResearchReport({ thread, data, onEvidence, mode, review }: { thr
       && (item.data.quality as { usable?: boolean } | undefined)?.usable !== false);
     const income = usable.find(item => item.toolName === 'get_financial_summary');
     const cashFlow = usable.find(item => item.toolName === 'get_fuyao_cash_flow' || item.toolName === 'get_cash_flow');
+    const market = usable.find(item => item.toolName === 'get_market_snapshot');
+    const valuation = usable.find(item => item.toolName === 'get_valuation_snapshot');
     const financeFirst = ['profitability', 'comprehensive'].includes(thread.researchScope?.type ?? '');
     const findings = report?.findings ?? [];
     const hasUsableEvidence = (finding: (typeof findings)[number]) =>
       finding.evidenceIds.length > 0 && finding.evidenceIds.every(id => usable.some(item => item.id === id));
-    const mainFinding = findings.find(finding => ['现金流对照', '经营现金流与归母净利润对照'].includes(finding.task) && hasUsableEvidence(finding))
-      ?? (financeFirst ? findings.find(finding => finding.evidenceIds.includes(income?.id ?? '') && hasUsableEvidence(finding)) : undefined)
+    const findingFor = (item?: ResearchEvidence) => item && findings.find(finding =>
+      finding.evidenceIds.includes(item.id) && hasUsableEvidence(finding));
+    const marketLead = /股价|行情|涨跌/.test(thread.goal) ? findingFor(market) : undefined;
+    const valuationLead = /估值|市盈率|市净率|\b(?:PE|PB)\b/i.test(thread.goal) ? findingFor(valuation) : undefined;
+    const mainFinding = marketLead ?? valuationLead
+      ?? findings.find(finding => ['现金流对照', '经营现金流与归母净利润对照'].includes(finding.task) && hasUsableEvidence(finding))
+      ?? (financeFirst ? findingFor(income) : undefined)
       ?? findings.find(hasUsableEvidence);
     const mainReason = report?.comparisons?.length ? findings.find(finding => finding.task === '经营活动产生的现金流量净额变动原因') : undefined;
-    const details = findings.filter(finding => finding !== mainFinding && finding !== mainReason);
+    const leadCompanions = [...new Set([valuationLead, mainReason])].filter(finding => finding && finding !== mainFinding);
+    const details = findings.filter(finding => finding !== mainFinding && !leadCompanions.includes(finding));
     return <section className="card report answer-report">
       <div className="card-heading">
         <h2><FileText size={17} />研究结果</h2>
@@ -58,12 +66,12 @@ export function ResearchReport({ thread, data, onEvidence, mode, review }: { thr
           <h3>结论摘要</h3>
           {report.period ? <p className="answer-period">实际取用 · {report.period}</p>
             : report.requestedPeriod ? <p className="answer-period">拟查 · {report.requestedPeriod} · 暂无可用结果</p>
-            : income && <p className="answer-period">财务数据截至 {income.period}</p>}
+            : !marketLead && !valuationLead && income && <p className="answer-period">财务数据截至 {income.period}</p>}
           {mainFinding && <div className="answer-lead">
             <FindingContent finding={mainFinding} evidence={evidenceById} />
-            {mainReason && mainReason !== mainFinding && <div className="mt-3 border-t pt-2">
-              <FindingContent finding={mainReason} evidence={evidenceById} />
-            </div>}
+            {leadCompanions.map(finding => finding && <div key={finding.task} className="mt-3 border-t pt-2">
+              <FindingContent finding={finding} evidence={evidenceById} />
+            </div>)}
           </div>}
           {!mainFinding && <p>{report.executiveSummary}</p>}
           {Boolean(report.comparisons?.length) && <PeriodComparison rows={report.comparisons ?? []} />}

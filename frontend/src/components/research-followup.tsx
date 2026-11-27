@@ -10,8 +10,10 @@ import type { FollowupAnswer, ResearchThread } from '@/types/research';
 
 interface Turn {
   question: string;
-  previousQuestion: string;
+  previousQuestion?: string;
+  history?: string[];
   contextRunId: string;
+  contextRunIds?: string[];
   answer: FollowupAnswer;
   supplementId?: string;
 }
@@ -37,9 +39,9 @@ export function ResearchFollowup({ thread, visible }: { thread: ResearchThread; 
   const tail = useRef<HTMLDivElement>(null);
   const scrollOnAnswer = useRef(false);
   const last = turns.at(-1);
-  const context = turns.findLast(turn => turn.supplementId && research[turn.supplementId]?.apiReport
-    && ['COMPLETE', 'PARTIAL'].includes(research[turn.supplementId]?.apiStatus ?? ''));
-  const contextRunId = context?.supplementId ?? rootRunId;
+  const completedRunIds = turns.flatMap(({ supplementId }) => supplementId && research[supplementId]?.apiReport
+    && ['COMPLETE', 'PARTIAL'].includes(research[supplementId]?.apiStatus ?? '') ? [supplementId] : []);
+  const contextRunId = completedRunIds.at(-1) ?? rootRunId;
   const evidence = new Map([...(thread.apiEvidence ?? []), ...Object.values(research).flatMap(run => run.apiEvidence ?? [])]
     .map(item => [item.id, item]));
 
@@ -61,8 +63,11 @@ export function ResearchFollowup({ thread, visible }: { thread: ResearchThread; 
   async function send(supplementIndex?: number) {
     const turn = supplementIndex === undefined ? undefined : turns[supplementIndex];
     const next = turn?.question ?? question.trim();
-    const previousQuestion = turn?.previousQuestion ?? last?.question ?? '';
     const runId = turn?.contextRunId ?? contextRunId;
+    const history = turn ? turn.history ?? (turn.previousQuestion ? [turn.previousQuestion] : [])
+      : turns.slice(-6).map(entry => entry.question);
+    const contextRunIds = turn ? turn.contextRunIds ?? []
+      : [...new Set([rootRunId, ...completedRunIds.slice(-5)])].filter(id => id && id !== runId);
     if (!runId || busy || next.length < 2 || turn?.supplementId) return;
     setBusy(true);
     setError('');
@@ -71,7 +76,7 @@ export function ResearchFollowup({ thread, visible }: { thread: ResearchThread; 
       setPendingQuestion(next);
     }
     try {
-      const response = await researchApi.followup(runId, next, previousQuestion, Boolean(turn));
+      const response = await researchApi.followup(runId, next, history, contextRunIds, Boolean(turn));
       if (!response.ok) {
         setError(response.error);
         return;
@@ -81,7 +86,7 @@ export function ResearchFollowup({ thread, visible }: { thread: ResearchThread; 
         setTurns(current => current.map((entry, index) => index === supplementIndex ? { ...entry, supplementId } : entry));
       } else {
         scrollOnAnswer.current = true;
-        setTurns(current => [...current, { question: next, previousQuestion, contextRunId: runId, answer: response.data }]);
+        setTurns(current => [...current, { question: next, history, contextRunId: runId, contextRunIds, answer: response.data }]);
         setQuestion('');
       }
     } catch {
@@ -104,7 +109,7 @@ export function ResearchFollowup({ thread, visible }: { thread: ResearchThread; 
           </div>)}
           {turn.supplementId ? <FollowupResearch runId={turn.supplementId} onUpdate={rememberResearch} />
             : turn.answer.draft_goal && <Button className="mt-3" variant="outline"
-              disabled={busy} onClick={() => void send(index)}>生成补查计划</Button>}
+              disabled={busy} onClick={() => void send(index)}>{turn.answer.draft_kind === 'market' ? '生成行情与估值补查计划' : '生成补查计划'}</Button>}
         </div>
       </article>)}
       {pendingQuestion && <article className="followup-turn">

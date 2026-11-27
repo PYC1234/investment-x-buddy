@@ -57,6 +57,24 @@ test('相同证据限制合并展示，并保留各自的证据入口', () => {
   assert.match(html, /查看证据 EVD-BBBB/);
 });
 
+test('行情与估值问题在摘要优先显示相关证据', () => {
+  const input = bundle();
+  input.run.goal = '招商银行股价走势怎样？结合市盈率和市净率看估值风险。';
+  input.report = {
+    title: '研究报告', status: 'COMPLETE', data_notice: '', executive_summary: '', missing_information: [],
+    evidence_ids: ['ev1', 'ev2', 'ev3'], findings: [
+      { task: '盈利', statement: '年度盈利结果', evidence_ids: ['ev2'] },
+      { task: '估值', statement: '估值快照结果', evidence_ids: ['ev3'] },
+      { task: '行情', statement: '近期行情结果', evidence_ids: ['ev1'] },
+    ],
+  };
+  const thread = applyBundle(initialThreads[0], input);
+  const html = renderToStaticMarkup(createElement(ResearchReport, { thread, data: null, mode: 'api', onEvidence: () => {} }));
+  const summary = html.split('详细发现')[0];
+  assert.match(summary, /近期行情结果.*估值快照结果/);
+  assert.doesNotMatch(summary, /年度盈利结果|财务数据截至/);
+});
+
 test('报告首屏只对照可匹配财年的利润与经营现金流', () => {
   const input = bundle();
   input.evidence[1].data.symbol = '600036.SH';
